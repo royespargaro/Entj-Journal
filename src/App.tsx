@@ -4789,8 +4789,8 @@ function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDa
     }
 
     // Filter by type/direction
-    if (filter === 'win') result = result.filter((t: any) => t.result === 'win');
-    else if (filter === 'loss') result = result.filter((t: any) => t.result === 'loss');
+    if (filter === 'win') result = result.filter((t: any) => t.result?.toLowerCase() === 'win');
+else if (filter === 'loss') result = result.filter((t: any) => t.result?.toLowerCase() === 'loss');
     else if (filter === 'short') result = result.filter((t: any) => t.dir === 'Short');
     else if (filter === 'long') result = result.filter((t: any) => t.dir === 'Long');
 
