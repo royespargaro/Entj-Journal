@@ -4007,56 +4007,80 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    setIsParsing(true);
-    
-    // Support XLSX
-    if (file.name.endsWith('.xlsx')) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        let rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-
-        // Find header row in Excel
-        let headerIndex = -1;
-        const keyWords = ['symbol', 'item', 'type', 'profit', 'time'];
-        for (let i = 0; i < Math.min(rows.length, 20); i++) {
-          const rowText = rows[i].join(' ').toLowerCase();
-          let matches = 0;
-          keyWords.forEach(kw => { if (rowText.includes(kw)) matches++; });
-          if (matches >= 3) {
-            headerIndex = i;
-            break;
-          }
+  setIsParsing(true);
+  
+  if (file.name.endsWith('.xlsx')) {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const data = new Uint8Array(event.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      
+      let positionsRows: any[] = [];
+      let inPositionsSection = false;
+      let headers: string[] = [];
+      
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        
+        const firstCell = String(row[0] || "").trim();
+        
+        if (firstCell === "Positions") {
+          inPositionsSection = true;
+          headers = [];
+          continue;
         }
-
-        if (headerIndex !== -1) {
-          const headers = rows[headerIndex];
-          const rawData = rows.slice(headerIndex + 1).map(row => {
-            const obj: any = {};
-            headers.forEach((h: any, idx: number) => {
-              obj[h] = row[idx];
-            });
-            return obj;
+        
+        if (inPositionsSection && (firstCell === "Orders" || firstCell === "Deals" || firstCell === "Open Positions")) {
+          break;
+        }
+        
+        if (!inPositionsSection) continue;
+        
+        const isHeaderRow = row[0] === "Time" && row[1] === "Position";
+        if (isHeaderRow && headers.length === 0) {
+          headers = row.map((cell: any) => String(cell || "").trim());
+          continue;
+        }
+        
+        if (!row[0] || row[0] === "" || String(row[0]).startsWith("---")) continue;
+        
+        const positionId = row[1];
+        if (positionId && typeof positionId === 'number' && positionId > 0) {
+          const tradeRow: any = {};
+          headers.forEach((header, idx) => {
+            let value = row[idx];
+            if (value === undefined || value === "") value = null;
+            tradeRow[header] = value;
           });
-
-          // Optional: Use AI to help with mapping if user wants or if it's very messy
-          // For now, let's try auto-mapping first
-          setRawRowsForAI(rawData);
-          processParsedData(rawData);
-        } else {
-          alert("Could not find headers in Excel file.");
-          setIsParsing(false);
+          positionsRows.push(tradeRow);
         }
-      };
-      reader.readAsArrayBuffer(file);
-      return;
-    }
+      }
+      
+      console.log(`Found ${positionsRows.length} positions in Positions section`);
+      
+      if (positionsRows.length === 0) {
+        alert("No Positions found. Export 'History' report from MT5.");
+        setIsParsing(false);
+        return;
+      }
+      
+      setRawRowsForAI(positionsRows);
+      processParsedData(positionsRows);
+    };
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+  
+  alert("Please use Excel (.xlsx) format exported from MT5");
+  setIsParsing(false);
+};
 
     const reader = new FileReader();
     reader.onload = (event) => {
