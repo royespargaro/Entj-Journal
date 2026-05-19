@@ -3844,49 +3844,18 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
     return null;
   };
 
-      const processParsedData = async (rows: any[], aiMapping?: any) => {
-    // Filter to ONLY valid trades (not orders, not balance adjustments, not deals)
+  const processParsedData = async (rows: any[], aiMapping?: any) => {
     const validTrades = rows
-      .filter(row => {
-        // 1. Must have a valid Position ID (numeric, not empty)
-        const positionId = row.Position || row.position;
-        if (!positionId || positionId === "" || isNaN(Number(positionId))) return false;
-        
-        // 2. Must have a valid symbol
-        const symbol = row.Symbol || row.symbol;
-        if (!symbol || symbol === "" || symbol === "Symbol") return false;
-        
-        // 3. Must be a trade (buy/sell), not balance adjustment
-        const type = String(row.Type || row.type || "").toLowerCase();
-        if (!type.includes("buy") && !type.includes("sell")) return false;
-        
-        // 4. Volume must NOT contain a slash (orders have "0.01 / 0" format)
-        const volume = String(row.Volume || row.volume || "");
-        if (volume.includes("/")) return false;
-        
-        // 5. Must have a profit value (not empty)
-        const profit = row.Profit || row.profit;
-        if (profit === undefined || profit === null || profit === "") return false;
-        
-        // 6. CRITICAL: Exclude Deals (balance adjustments, deposits, withdrawals)
-        const comment = String(row.Comment || row.comment || "");
-        if (comment.toLowerCase().includes("balance") || 
-            comment.toLowerCase().includes("deposit") || 
-            comment.toLowerCase().includes("withdraw") ||
-            comment.toLowerCase().includes("transfer")) {
-          return false;
-        }
-        
-        return true;
-      })
       .map((row) => {
         const findKey = (keys: string[]) => {
           if (aiMapping) {
+            // First check for direct matches from AI mapping
             for (const k of keys) {
               if (aiMapping[k] && row[aiMapping[k]] !== undefined) return aiMapping[k];
             }
           }
           const rowKeys = Object.keys(row);
+          // Standard heuristics
           return rowKeys.find(rk => keys.some(k => {
             const cleanRk = rk.toLowerCase().trim().replace(/[\s_.-]/g, '');
             const cleanK = k.toLowerCase().replace(/[\s_.-]/g, '');
@@ -3903,94 +3872,72 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
         const openPriceKey = findKey(['open price', 'price', 'entry', 'strike', 'at open', 'open at', 'value']);
         const exitPriceKey = findKey(['close price', 'exit price', 'close', 'exit', 'out', 'out at']);
         const volumeKey = findKey(['volume', 'size', 'lot', 'amount', 'qty', 'unit', 'vol']);
+        const ticketKey = findKey(['ticket', 'order', 'id', 'deal', 'ref', 'no', 'num', 'key']);
         const notesKey = findKey(['comment', 'notes', 'remark', 'msg']);
         const slKey = findKey(['s / l', 'sl', 'stop loss', 's/l']);
         const tpKey = findKey(['t / p', 'tp', 'take profit', 't/p']);
-        const ticketKey = findKey(['ticket', 'order', 'id', 'deal', 'ref', 'no', 'num', 'key']);
 
         if (!itemKey || !typeKey || !row[itemKey] || !row[typeKey]) return null;
         
         const type = String(row[typeKey]).toLowerCase();
+        if (type.includes('balance') || type.includes('deposit') || type.includes('withdrawal') || type.includes('credit') || type.includes('fee')) return null;
         
-        // Calculate net profit (profit + commission + swap)
         const rawProfit = row[profitKey!];
         if (rawProfit === undefined || rawProfit === null || rawProfit === '') return null;
         
         const profit = cleanMoney(rawProfit);
-        const commission = cleanMoney(row.Commission || row.commission || 0);
-        const swap = cleanMoney(row.Swap || row.swap || 0);
-        const netProfit = profit + commission + swap;
-        
-        // Parse date - handle "2026.04.30 20:26:50" format
         const dateStr = String(row[openTimeKey!] || '');
-        let formattedDate = new Date().toISOString().split('T')[0];
+        // Match YYYY.MM.DD HH:MM:SS or similar
+        const dateMatch = dateStr.match(/(\d{4})[./-](\d{2})[./-](\d{2})/) || 
+                         dateStr.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
         
-        const dateMatch = dateStr.match(/(\d{4})\.(\d{2})\.(\d{2})/);
+        let formattedDate = new Date().toISOString().split('T')[0];
         if (dateMatch) {
-          formattedDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
-        } else {
-          const fallbackMatch = dateStr.match(/(\d{4})[./-](\d{2})[./-](\d{2})/);
-          if (fallbackMatch) {
-            formattedDate = `${fallbackMatch[1]}-${fallbackMatch[2]}-${fallbackMatch[3]}`;
+          // Normalize to YYYY-MM-DD
+          const [_, p1, p2, p3] = dateMatch;
+          if (p1.length === 4) {
+            // YYYY.MM.DD or YYYY-MM-DD
+            formattedDate = `${p1}-${p2}-${p3}`;
+          } else {
+            // DD.MM.YYYY or MM.DD.YYYY? 
+            if (p3.length === 4) {
+              formattedDate = `${p3}-${p2}-${p1}`;
+            }
           }
         }
         
-        const timeMatch = dateStr.match(/(\d{2}):(\d{2}):(\d{2})/);
-        const formattedTime = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '00:00';
-        
-        // Parse volume (ensure positive)
-        let volume = Math.abs(cleanMoney(row[volumeKey!] || '0.01'));
-        
-        // Parse SL/TP
+        const timeMatch = dateStr.match(/(\d{2}):(\d{2}):(\d{2})/) || dateStr.match(/(\d{2}):(\d{2})/);
+        const formattedTime = timeMatch ? timeMatch[0] : new Date().toTimeString().slice(0, 5);
+
         const sl = slKey ? cleanMoney(row[slKey]) : 0;
         const tp = tpKey ? cleanMoney(row[tpKey]) : 0;
-        
-        // Determine result
-        let result = 'be';
-        if (netProfit > 0.01) result = 'win';
-        else if (netProfit < -0.01) result = 'loss';
-        
-        // Detect session from time
-        const hour = parseInt(formattedTime.split(':')[0]);
-        let session = 'New York';
-        if (hour >= 0 && hour < 9) session = 'Asia';
-        else if (hour >= 8 && hour < 17) session = 'London';
-        
+
         return {
           date: formattedDate,
           time: formattedTime,
           pair: String(row[itemKey]).toUpperCase().trim(),
           dir: (type.includes('buy') || type.includes('long') || type.includes('in')) ? 'Long' : 'Short',
-          lot: volume,
+          lot: cleanMoney(row[volumeKey!] || '0.01'),
           entry: cleanMoney(row[openPriceKey!] || '0'),
-          exit: cleanMoney(row[exitPriceKey!] || row[openPriceKey!] || '0'),
+          exit: cleanMoney(row[exitPriceKey!] || row[openPriceKey!] || '0'), 
           sl: sl || null,
           tp: tp || null,
-          pnl: netProfit,
+          pnl: profit,
           currency: displayCurrency,
-          result: result,
+          result: profit > 0.0001 ? 'win' : (profit < -0.0001 ? 'loss' : 'be'),
           setup: aiMapping ? 'AI Smart Import' : 'MT5 Import',
-          session: session,
+          session: 'London',
           emotion: 'Neutral',
-          notes: `${row[notesKey!] || ''} (Position #${row.Position || row.position || ''})`.trim(),
+          notes: `${row[notesKey!] || ''} (MT5 ticket ${row[ticketKey || ''] || 'N/A'})`.trim(),
           news: 'no',
           plan: 'yes',
           ss: '',
           dur: '',
-          reason: 'MT5 History Export',
-          ticket: row.Position || row.position || null
+          reason: 'MT5 History Export'
         };
       })
       .filter(Boolean);
 
-    console.log(`Filtered to ${validTrades.length} actual trades (should be 17 for your file)`);
-    
-    if (validTrades.length === 0) {
-      alert("No trade entries found. Please check your file content.");
-      setIsParsing(false);
-      return;
-    }
-    
     finalizeImport(validTrades);
   };
 
@@ -4007,80 +3954,56 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  setIsParsing(true);
-  
-  if (file.name.endsWith('.xlsx')) {
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const data = new Uint8Array(event.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-      
-      let positionsRows: any[] = [];
-      let inPositionsSection = false;
-      let headers: string[] = [];
-      
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row || row.length === 0) continue;
-        
-        const firstCell = String(row[0] || "").trim();
-        
-        if (firstCell === "Positions") {
-          inPositionsSection = true;
-          headers = [];
-          continue;
+    setIsParsing(true);
+    
+    // Support XLSX
+    if (file.name.endsWith('.xlsx')) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        let rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+        // Find header row in Excel
+        let headerIndex = -1;
+        const keyWords = ['symbol', 'item', 'type', 'profit', 'time'];
+        for (let i = 0; i < Math.min(rows.length, 20); i++) {
+          const rowText = rows[i].join(' ').toLowerCase();
+          let matches = 0;
+          keyWords.forEach(kw => { if (rowText.includes(kw)) matches++; });
+          if (matches >= 3) {
+            headerIndex = i;
+            break;
+          }
         }
-        
-        if (inPositionsSection && (firstCell === "Orders" || firstCell === "Deals" || firstCell === "Open Positions")) {
-          break;
-        }
-        
-        if (!inPositionsSection) continue;
-        
-        const isHeaderRow = row[0] === "Time" && row[1] === "Position";
-        if (isHeaderRow && headers.length === 0) {
-          headers = row.map((cell: any) => String(cell || "").trim());
-          continue;
-        }
-        
-        if (!row[0] || row[0] === "" || String(row[0]).startsWith("---")) continue;
-        
-        const positionId = row[1];
-        if (positionId && typeof positionId === 'number' && positionId > 0) {
-          const tradeRow: any = {};
-          headers.forEach((header, idx) => {
-            let value = row[idx];
-            if (value === undefined || value === "") value = null;
-            tradeRow[header] = value;
+
+        if (headerIndex !== -1) {
+          const headers = rows[headerIndex];
+          const rawData = rows.slice(headerIndex + 1).map(row => {
+            const obj: any = {};
+            headers.forEach((h: any, idx: number) => {
+              obj[h] = row[idx];
+            });
+            return obj;
           });
-          positionsRows.push(tradeRow);
+
+          // Optional: Use AI to help with mapping if user wants or if it's very messy
+          // For now, let's try auto-mapping first
+          setRawRowsForAI(rawData);
+          processParsedData(rawData);
+        } else {
+          alert("Could not find headers in Excel file.");
+          setIsParsing(false);
         }
-      }
-      
-      console.log(`Found ${positionsRows.length} positions in Positions section`);
-      
-      if (positionsRows.length === 0) {
-        alert("No Positions found. Export 'History' report from MT5.");
-        setIsParsing(false);
-        return;
-      }
-      
-      setRawRowsForAI(positionsRows);
-      processParsedData(positionsRows);
-    };
-    reader.readAsArrayBuffer(file);
-    return;
-  }
-  
-  alert("Please use Excel (.xlsx) format exported from MT5");
-  setIsParsing(false);
-};
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
