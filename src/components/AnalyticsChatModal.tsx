@@ -37,10 +37,16 @@ export const AnalyticsChatModal: React.FC<AnalyticsChatModalProps> = ({ onClose,
       const completion = await client.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          { role: 'system', content: `You are an elite trading mentor. Analyze this trader's performance data and answer their questions directly and concisely: ${JSON.stringify(context)}` },
+          { role: 'system', content: `You are an elite prop desk trading mentor. Analyze this trader's performance data and give deep, valuable insights. Format your response cleanly using:
+- Bold headers for each section using **Header**
+- Bullet points for lists
+- Line breaks between sections
+- Be direct, specific, and data-driven. No fluff. No filler sentences.
+- Call out weaknesses brutally. Reinforce strengths clearly.
+Trader data: ${JSON.stringify(context)}` },
           ...[...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
         ],
-        max_tokens: 500,
+        max_tokens: 1000,
       });
       const result = completion.choices[0]?.message?.content || 'No response.';
       setMessages(prev => [...prev, { role: 'assistant', content: result }]);
@@ -69,12 +75,24 @@ export const AnalyticsChatModal: React.FC<AnalyticsChatModalProps> = ({ onClose,
         <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
             {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-4 rounded-2xl max-w-[80%] text-sm ${m.role === 'user' ? 'bg-spotify-green text-black font-bold' : 'bg-white/5 text-white'}`}>
-                        <Markdown>{m.content}</Markdown>
+                    <div className={`p-4 rounded-2xl max-w-[80%] text-sm leading-relaxed ${m.role === 'user' ? 'bg-spotify-green text-black font-bold' : 'bg-white/5 text-white'}`}>
+                        <Markdown components={{
+                          strong: ({children}) => <span className="text-spotify-green font-bold">{children}</span>,
+                          p: ({children}) => <p className="mb-3 last:mb-0">{children}</p>,
+                          ul: ({children}) => <ul className="list-disc pl-4 space-y-1 mb-3">{children}</ul>,
+                          li: ({children}) => <li className="text-white/80">{children}</li>,
+                          h3: ({children}) => <h3 className="text-white font-black uppercase tracking-widest text-xs mb-2 mt-4">{children}</h3>,
+                        }}>{m.content}</Markdown>
                     </div>
                 </div>
             ))}
-            {isLoading && <div className="text-spotify-muted text-xs">Analyzing...</div>}
+            {isLoading && (
+              <div className="flex items-center gap-2 text-spotify-muted text-xs">
+                <div className="w-1.5 h-1.5 bg-spotify-green rounded-full animate-bounce" />
+                <div className="w-1.5 h-1.5 bg-spotify-green rounded-full animate-bounce delay-100" />
+                <div className="w-1.5 h-1.5 bg-spotify-green rounded-full animate-bounce delay-200" />
+              </div>
+            )}
         </div>
 
         <div className="flex gap-2">
