@@ -3844,29 +3844,38 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
     return null;
   };
 
-    const processParsedData = async (rows: any[], aiMapping?: any) => {
-    // Filter to ONLY valid trades (not orders, not balance adjustments)
+      const processParsedData = async (rows: any[], aiMapping?: any) => {
+    // Filter to ONLY valid trades (not orders, not balance adjustments, not deals)
     const validTrades = rows
       .filter(row => {
-        // Must have a valid Position ID (numeric, not empty)
+        // 1. Must have a valid Position ID (numeric, not empty)
         const positionId = row.Position || row.position;
         if (!positionId || positionId === "" || isNaN(Number(positionId))) return false;
         
-        // Must have a valid symbol
+        // 2. Must have a valid symbol
         const symbol = row.Symbol || row.symbol;
         if (!symbol || symbol === "" || symbol === "Symbol") return false;
         
-        // Must be a trade (buy/sell), not balance adjustment
+        // 3. Must be a trade (buy/sell), not balance adjustment
         const type = String(row.Type || row.type || "").toLowerCase();
         if (!type.includes("buy") && !type.includes("sell")) return false;
         
-        // Volume must NOT contain a slash (orders have "0.01 / 0" format)
+        // 4. Volume must NOT contain a slash (orders have "0.01 / 0" format)
         const volume = String(row.Volume || row.volume || "");
         if (volume.includes("/")) return false;
         
-        // Must have a profit value (not empty)
+        // 5. Must have a profit value (not empty)
         const profit = row.Profit || row.profit;
         if (profit === undefined || profit === null || profit === "") return false;
+        
+        // 6. CRITICAL: Exclude Deals (balance adjustments, deposits, withdrawals)
+        const comment = String(row.Comment || row.comment || "");
+        if (comment.toLowerCase().includes("balance") || 
+            comment.toLowerCase().includes("deposit") || 
+            comment.toLowerCase().includes("withdraw") ||
+            comment.toLowerCase().includes("transfer")) {
+          return false;
+        }
         
         return true;
       })
