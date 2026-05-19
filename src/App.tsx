@@ -5306,7 +5306,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
       )}
     </div>
   );
-}
+
 function AnalyticsPage({ trades, displayCurrency }: any) {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
