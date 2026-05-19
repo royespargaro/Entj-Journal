@@ -1419,51 +1419,43 @@ If no anomaly: return exactly the word NULL`}]
   };
 
   const importTrades = async (newTrades: any[]) => {
-    if (!user) return;
-    
-    // Add trades to local state immediately for instant feedback
-    const optimisticTrades = newTrades.map(t => ({
-      ...t,
-      id: `temp-${Math.random().toString(36).substr(2, 9)}`,
-      userId: user.uid,
-      createdAt: new Date().toISOString()
-    }));
-    
-    setTrades(prev => [...optimisticTrades, ...prev]);
+  if (!user) return;
 
-    // Firestore batch limit is 500. Split into chunks.
-    const chunks = [];
-    for (let i = 0; i < newTrades.length; i += 500) {
-      chunks.push(newTrades.slice(i, i + 500));
-    }
+  // ✅ REMOVED optimistic update — onSnapshot handles state automatically
+  // Adding temp trades + real Firestore trades = duplicates
 
-    try {
-      for (const chunk of chunks) {
-        const batch = writeBatch(db);
-        chunk.forEach(t => {
-          const newDocRef = doc(collection(db, `users/${user.uid}/trades`));
-          // Remove extra fields and ensure types
-          const { id, tempId, ...data } = t; 
-          batch.set(newDocRef, {
-            ...data,
-            userId: user.uid,
-            sl: t.sl ?? null,
-            tp: t.tp ?? null,
-            createdAt: serverTimestamp()
-          });
+  const chunks = [];
+  for (let i = 0; i < newTrades.length; i += 500) {
+    chunks.push(newTrades.slice(i, i + 500));
+  }
+
+  try {
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      chunk.forEach(t => {
+        const newDocRef = doc(collection(db, `users/${user.uid}/trades`));
+        const { id, tempId, ...data } = t;
+        batch.set(newDocRef, {
+          ...data,
+          userId: user.uid,
+          sl: t.sl ?? null,
+          tp: t.tp ?? null,
+          closeDate: t.closeDate ?? null,  // ✅ persist closeDate for calendar
+          openDate:  t.openDate  ?? null,
+          createdAt: serverTimestamp()
         });
-        await batch.commit();
-      }
-      
-      showToast(`Successfully imported ${newTrades.length} trades`);
-      setIsImportOpen(false);
-      setActivePage('history');
-    } catch (error) {
-      console.error('Import batch error:', JSON.stringify(error));
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/trades`);
+      });
+      await batch.commit();
     }
-  };
 
+    showToast(`Successfully imported ${newTrades.length} trades`);
+    setIsImportOpen(false);
+    setActivePage('history');
+  } catch (error) {
+    console.error('Import batch error:', JSON.stringify(error));
+    handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/trades`);
+  }
+};
   const updateMultipleTrades = async (ids: string[], updates: any) => {
     if (!user || ids.length === 0) return;
     
