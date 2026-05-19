@@ -24,23 +24,26 @@ export const AnalyticsChatModal: React.FC<AnalyticsChatModalProps> = ({ onClose,
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
     const userMessage = { role: 'user' as const, content: input };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
-
     try {
-      const response = await fetch('/api/analytics-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            messages: [...messages, userMessage],
-            context 
-        }),
+      const Groq = (await import('groq-sdk')).default;
+      const client = new Groq({ 
+        apiKey: import.meta.env.VITE_GROQ_API_KEY, 
+        dangerouslyAllowBrowser: true 
       });
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.result }]);
+      const completion = await client.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: `You are an elite trading mentor. Analyze this trader's performance data and answer their questions directly and concisely: ${JSON.stringify(context)}` },
+          ...[...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
+        ],
+        max_tokens: 500,
+      });
+      const result = completion.choices[0]?.message?.content || 'No response.';
+      setMessages(prev => [...prev, { role: 'assistant', content: result }]);
     } catch (err) {
       console.error("Chat failed:", err);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Oops, I had trouble processing that. Please try again.' }]);
