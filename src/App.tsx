@@ -5326,8 +5326,8 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
     });
 
     // Win rate by Direction
-    const shorts = trades.filter((t: any) => t.dir === 'short');
-    const longs = trades.filter((t: any) => t.dir === 'long');
+    const shorts = trades.filter((t: any) => t.dir === 'Short');
+    const longs = trades.filter((t: any) => t.dir === 'Long');
     const swr = shorts.length ? Math.round(shorts.filter((t: any) => t.result === 'win').length / shorts.length * 100) : 0;
     const lwr = longs.length ? Math.round(longs.filter((t: any) => t.result === 'win').length / longs.length * 100) : 0;
 
@@ -5594,7 +5594,7 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
                     className="relative rounded-xl p-3 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 cursor-default"
                     style={{ 
                       backgroundColor: getColor(cell.pnl, cell.count),
-                      minHeight: '72px',
+                      minHeight: '100px',
                       border: '1px solid rgba(255,255,255,0.05)'
                     }}
                     title={`${emotion} / ${session}: ${cell.count} trades, $${cell.pnl.toFixed(2)} P&L, ${wr}% WR`}
@@ -5603,11 +5603,11 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
                       <span className="text-[10px] text-white/15 font-bold">—</span>
                     ) : (
                       <>
-                        <span className="text-[11px] font-black" style={{ color: getTextColor(cell.pnl, cell.count) }}>
+                        <span className="text-sm font-black" style={{ color: getTextColor(cell.pnl, cell.count) }}>
                           {cell.pnl >= 0 ? '+' : ''}{cell.pnl.toFixed(0)}$
                         </span>
-                        <span className="text-[9px] text-white/40 font-bold">{wr}% WR</span>
-                        <span className="text-[9px] text-white/25">{cell.count}T</span>
+                        <span className="text-[10px] text-white font-bold">{wr}% WR</span>
+                        <span className="text-[10px] text-white/60 font-bold">{cell.count}T</span>
                       </>
                     )}
                   </div>
