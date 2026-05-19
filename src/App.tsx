@@ -3844,18 +3844,40 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
     return null;
   };
 
-  const processParsedData = async (rows: any[], aiMapping?: any) => {
+    const processParsedData = async (rows: any[], aiMapping?: any) => {
+    // Filter to ONLY valid trades (not orders, not balance adjustments)
     const validTrades = rows
+      .filter(row => {
+        // Must have a valid Position ID (numeric, not empty)
+        const positionId = row.Position || row.position;
+        if (!positionId || positionId === "" || isNaN(Number(positionId))) return false;
+        
+        // Must have a valid symbol
+        const symbol = row.Symbol || row.symbol;
+        if (!symbol || symbol === "" || symbol === "Symbol") return false;
+        
+        // Must be a trade (buy/sell), not balance adjustment
+        const type = String(row.Type || row.type || "").toLowerCase();
+        if (!type.includes("buy") && !type.includes("sell")) return false;
+        
+        // Volume must NOT contain a slash (orders have "0.01 / 0" format)
+        const volume = String(row.Volume || row.volume || "");
+        if (volume.includes("/")) return false;
+        
+        // Must have a profit value (not empty)
+        const profit = row.Profit || row.profit;
+        if (profit === undefined || profit === null || profit === "") return false;
+        
+        return true;
+      })
       .map((row) => {
         const findKey = (keys: string[]) => {
           if (aiMapping) {
-            // First check for direct matches from AI mapping
             for (const k of keys) {
               if (aiMapping[k] && row[aiMapping[k]] !== undefined) return aiMapping[k];
             }
           }
           const rowKeys = Object.keys(row);
-          // Standard heuristics
           return rowKeys.find(rk => keys.some(k => {
             const cleanRk = rk.toLowerCase().trim().replace(/[\s_.-]/g, '');
             const cleanK = k.toLowerCase().replace(/[\s_.-]/g, '');
@@ -3872,72 +3894,94 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
         const openPriceKey = findKey(['open price', 'price', 'entry', 'strike', 'at open', 'open at', 'value']);
         const exitPriceKey = findKey(['close price', 'exit price', 'close', 'exit', 'out', 'out at']);
         const volumeKey = findKey(['volume', 'size', 'lot', 'amount', 'qty', 'unit', 'vol']);
-        const ticketKey = findKey(['ticket', 'order', 'id', 'deal', 'ref', 'no', 'num', 'key']);
         const notesKey = findKey(['comment', 'notes', 'remark', 'msg']);
         const slKey = findKey(['s / l', 'sl', 'stop loss', 's/l']);
         const tpKey = findKey(['t / p', 'tp', 'take profit', 't/p']);
+        const ticketKey = findKey(['ticket', 'order', 'id', 'deal', 'ref', 'no', 'num', 'key']);
 
         if (!itemKey || !typeKey || !row[itemKey] || !row[typeKey]) return null;
         
         const type = String(row[typeKey]).toLowerCase();
-        if (type.includes('balance') || type.includes('deposit') || type.includes('withdrawal') || type.includes('credit') || type.includes('fee')) return null;
         
+        // Calculate net profit (profit + commission + swap)
         const rawProfit = row[profitKey!];
         if (rawProfit === undefined || rawProfit === null || rawProfit === '') return null;
         
         const profit = cleanMoney(rawProfit);
-        const dateStr = String(row[openTimeKey!] || '');
-        // Match YYYY.MM.DD HH:MM:SS or similar
-        const dateMatch = dateStr.match(/(\d{4})[./-](\d{2})[./-](\d{2})/) || 
-                         dateStr.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
+        const commission = cleanMoney(row.Commission || row.commission || 0);
+        const swap = cleanMoney(row.Swap || row.swap || 0);
+        const netProfit = profit + commission + swap;
         
+        // Parse date - handle "2026.04.30 20:26:50" format
+        const dateStr = String(row[openTimeKey!] || '');
         let formattedDate = new Date().toISOString().split('T')[0];
+        
+        const dateMatch = dateStr.match(/(\d{4})\.(\d{2})\.(\d{2})/);
         if (dateMatch) {
-          // Normalize to YYYY-MM-DD
-          const [_, p1, p2, p3] = dateMatch;
-          if (p1.length === 4) {
-            // YYYY.MM.DD or YYYY-MM-DD
-            formattedDate = `${p1}-${p2}-${p3}`;
-          } else {
-            // DD.MM.YYYY or MM.DD.YYYY? 
-            if (p3.length === 4) {
-              formattedDate = `${p3}-${p2}-${p1}`;
-            }
+          formattedDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+        } else {
+          const fallbackMatch = dateStr.match(/(\d{4})[./-](\d{2})[./-](\d{2})/);
+          if (fallbackMatch) {
+            formattedDate = `${fallbackMatch[1]}-${fallbackMatch[2]}-${fallbackMatch[3]}`;
           }
         }
         
-        const timeMatch = dateStr.match(/(\d{2}):(\d{2}):(\d{2})/) || dateStr.match(/(\d{2}):(\d{2})/);
-        const formattedTime = timeMatch ? timeMatch[0] : new Date().toTimeString().slice(0, 5);
-
+        const timeMatch = dateStr.match(/(\d{2}):(\d{2}):(\d{2})/);
+        const formattedTime = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '00:00';
+        
+        // Parse volume (ensure positive)
+        let volume = Math.abs(cleanMoney(row[volumeKey!] || '0.01'));
+        
+        // Parse SL/TP
         const sl = slKey ? cleanMoney(row[slKey]) : 0;
         const tp = tpKey ? cleanMoney(row[tpKey]) : 0;
-
+        
+        // Determine result
+        let result = 'be';
+        if (netProfit > 0.01) result = 'win';
+        else if (netProfit < -0.01) result = 'loss';
+        
+        // Detect session from time
+        const hour = parseInt(formattedTime.split(':')[0]);
+        let session = 'New York';
+        if (hour >= 0 && hour < 9) session = 'Asia';
+        else if (hour >= 8 && hour < 17) session = 'London';
+        
         return {
           date: formattedDate,
           time: formattedTime,
           pair: String(row[itemKey]).toUpperCase().trim(),
           dir: (type.includes('buy') || type.includes('long') || type.includes('in')) ? 'Long' : 'Short',
-          lot: cleanMoney(row[volumeKey!] || '0.01'),
+          lot: volume,
           entry: cleanMoney(row[openPriceKey!] || '0'),
-          exit: cleanMoney(row[exitPriceKey!] || row[openPriceKey!] || '0'), 
+          exit: cleanMoney(row[exitPriceKey!] || row[openPriceKey!] || '0'),
           sl: sl || null,
           tp: tp || null,
-          pnl: profit,
+          pnl: netProfit,
           currency: displayCurrency,
-          result: profit > 0.0001 ? 'win' : (profit < -0.0001 ? 'loss' : 'be'),
+          result: result,
           setup: aiMapping ? 'AI Smart Import' : 'MT5 Import',
-          session: 'London',
+          session: session,
           emotion: 'Neutral',
-          notes: `${row[notesKey!] || ''} (MT5 ticket ${row[ticketKey || ''] || 'N/A'})`.trim(),
+          notes: `${row[notesKey!] || ''} (Position #${row.Position || row.position || ''})`.trim(),
           news: 'no',
           plan: 'yes',
           ss: '',
           dur: '',
-          reason: 'MT5 History Export'
+          reason: 'MT5 History Export',
+          ticket: row.Position || row.position || null
         };
       })
       .filter(Boolean);
 
+    console.log(`Filtered to ${validTrades.length} actual trades (should be 17 for your file)`);
+    
+    if (validTrades.length === 0) {
+      alert("No trade entries found. Please check your file content.");
+      setIsParsing(false);
+      return;
+    }
+    
     finalizeImport(validTrades);
   };
 
