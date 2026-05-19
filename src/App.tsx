@@ -4795,12 +4795,22 @@ function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDa
     else if (filter === 'long') result = result.filter((t: any) => t.dir === 'Long');
 
     // Filter by date range
-    if (startDate) {
-      result = result.filter((t: any) => t.date >= startDate);
-    }
-    if (endDate) {
-      result = result.filter((t: any) => t.date <= endDate);
-    }
+   if (startDate) {
+  result = result.filter((t: any) => {
+    const tradeDate = t.date?.seconds 
+      ? new Date(t.date.seconds * 1000).toISOString().split('T')[0]
+      : t.date?.split('T')[0] || t.date;
+    return tradeDate >= startDate;
+  });
+}
+if (endDate) {
+  result = result.filter((t: any) => {
+    const tradeDate = t.date?.seconds 
+      ? new Date(t.date.seconds * 1000).toISOString().split('T')[0]
+      : t.date?.split('T')[0] || t.date;
+    return tradeDate <= endDate;
+  });
+}
 
     return result;
   }, [trades, filter, startDate, endDate, search]);
