@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Zap, BarChart3, Brain, BookOpen, Target, Download, Bell, FileText, Shield, ShieldCheck, User, Calendar, Sparkles, ShieldAlert } from 'lucide-react';
+import { X, Zap, BarChart3, Brain, BookOpen, Target, Download, Bell, FileText, Shield, ShieldCheck, User, Calendar, ShieldAlert } from 'lucide-react';
 import { CURRENCIES } from '../constants';
 
 export const MoreMenu = ({ isOpen, onClose, setActivePage, setIsRulesOpen, setIsNotificationsOpen, setIsLegalOpen, setIsExportOpen, setLegalType, logout, user, displayCurrency, setDisplayCurrency, trades, stats }: any) => {
@@ -13,7 +13,6 @@ export const MoreMenu = ({ isOpen, onClose, setActivePage, setIsRulesOpen, setIs
     { id: 'calendar', label: 'P&L\nCalendar', icon: Calendar },
     { id: 'calculator', label: 'FX & Fib\nCalc', icon: Zap },
     { id: 'import', label: 'Import\nMT5', icon: Download },
-    { id: 'insights', label: 'AI\nInsights', icon: Sparkles },
     { id: 'rules', label: 'Rules\nEngine', icon: ShieldAlert },
     { id: 'notifications', label: 'Notifica-\ntions', icon: Bell },
     { id: 'export', label: 'Export\nPDF', icon: FileText },
