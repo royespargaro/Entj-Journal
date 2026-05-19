@@ -3961,49 +3961,87 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
     
     // Support XLSX
     if (file.name.endsWith('.xlsx')) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        let rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    const data = new Uint8Array(event.target?.result as ArrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-        // Find header row in Excel
-        let headerIndex = -1;
-        const keyWords = ['symbol', 'item', 'type', 'profit', 'time'];
-        for (let i = 0; i < Math.min(rows.length, 20); i++) {
-          const rowText = rows[i].join(' ').toLowerCase();
-          let matches = 0;
-          keyWords.forEach(kw => { if (rowText.includes(kw)) matches++; });
-          if (matches >= 3) {
-            headerIndex = i;
-            break;
-          }
-        }
+    const validTrades: any[] = [];
+    let inPositions = false;
+    let headerFound = false;
 
-        if (headerIndex !== -1) {
-          const headers = rows[headerIndex];
-          const rawData = rows.slice(headerIndex + 1).map(row => {
-            const obj: any = {};
-            headers.forEach((h: any, idx: number) => {
-              obj[h] = row[idx];
-            });
-            return obj;
-          });
+    for (const row of rows) {
+      const first = row[0];
 
-          // Optional: Use AI to help with mapping if user wants or if it's very messy
-          // For now, let's try auto-mapping first
-          setRawRowsForAI(rawData);
-          processParsedData(rawData);
-        } else {
-          alert("Could not find headers in Excel file.");
-          setIsParsing(false);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-      return;
+      if (first === 'Positions') { inPositions = true; headerFound = false; continue; }
+      if (first === 'Orders' || first === 'Deals') break;
+
+      if (!inPositions) continue;
+      if (first === 'Time') { headerFound = true; continue; }
+      if (!headerFound || !first || !row[2]) continue;
+
+      const typeRaw = String(row[3] ?? '').toLowerCase().trim();
+      if (typeRaw !== 'buy' && typeRaw !== 'sell') continue;
+
+      // Dates — open is row[0], close is row[8]
+      const openStr  = String(row[0] ?? '');
+      const closeStr = String(row[8] ?? '');
+
+      const openMatch  = openStr.match(/(\d{4})[./-](\d{2})[./-](\d{2})/);
+      const closeMatch = closeStr.match(/(\d{4})[./-](\d{2})[./-](\d{2})/);
+      const timeMatch  = openStr.match(/(\d{2}):(\d{2})/);
+
+      // ✅ date = CLOSE date so calendar plots P&L on the day trade was realized
+      const closeDate = closeMatch
+        ? `${closeMatch[1]}-${closeMatch[2]}-${closeMatch[3]}`
+        : new Date().toISOString().split('T')[0];
+
+      const openDate = openMatch
+        ? `${openMatch[1]}-${openMatch[2]}-${openMatch[3]}`
+        : closeDate;
+
+      const formattedTime = timeMatch ? timeMatch[0] : '00:00';
+
+      const profit  = Number(row[12]) || 0;
+      const symbol  = String(row[2]).trim().replace(/m$/, '');
+
+      validTrades.push({
+        date:      closeDate,       // ✅ close date — used by calendar
+        openDate:  openDate,        // entry date — for reference
+        closeDate: closeDate,       // explicit closeDate — calendar fallback
+        time:      formattedTime,
+        pair:      symbol,
+        dir:       typeRaw === 'buy' ? 'Long' : 'Short', // ✅ correct direction
+        lot:       cleanMoney(String(row[4] ?? '0.01')) || 0.01,
+        entry:     Number(row[5]) || 0,
+        exit:      Number(row[9]) || 0,
+        sl:        Number(row[6]) || null,
+        tp:        Number(row[7]) || null,
+        pnl:       profit,
+        currency:  displayCurrency,
+        result:    profit > 0 ? 'win' : profit < 0 ? 'loss' : 'be',
+        setup:     'MT5 Import',
+        session:   'London',
+        emotion:   'Neutral',
+        notes:     `Position ID: ${row[1] ?? 'N/A'}`,
+        news:      'no',
+        plan:      'yes',
+        ss:        '',
+        dur:       '',
+        reason:    'MT5 History Export',
+        tags:      []
+      });
     }
+
+    setRawRowsForAI(validTrades);
+    finalizeImport(validTrades);
+  };
+  reader.readAsArrayBuffer(file);
+  return;
+}
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -5111,7 +5149,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
   const winRate = monthTrades.length > 0 ? (monthTrades.filter((t:any) => t.result === 'WIN').length / monthTrades.length) * 100 : 0;
   
   const dailyPnls = monthTrades.reduce((acc: any, t: any) => {
-      const dKey = getLocalDateKey(t.date);
+    const dKey = getLocalDateKey(t.closeDate || t.date);
       acc[dKey] = (acc[dKey] || 0) + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
       return acc;
   }, {});
@@ -5187,7 +5225,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
             {weeks.map((week, weekIdx) => {
                 const weekTrades = week.filter(d => d.isCurrentMonth).flatMap(d => {
                     const dateKey = `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}`;
-                    return trades.filter((t: any) => getLocalDateKey(t.closeTime || t.date || t.createdAt) === dateKey);
+                    return trades.filter((t: any) => getLocalDateKey(t.closeDate || t.date) === dateKey);
                 });
                 const weekPnL = weekTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
                 
@@ -5196,7 +5234,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
                         {week.map((d, i) => {
                             const dateKey = `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}`;
                             const isToday = dateKey === getLocalDateKey(new Date());
-                            const dayTrades = trades.filter((t: any) => getLocalDateKey(t.closeTime || t.date || t.createdAt) === dateKey);
+                            const dayTrades = trades.filter((t: any) => getLocalDateKey(t.closeDate || t.date) === dateKey);
                             const pnl = dayTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
                             const winRate = dayTrades.length > 0 ? (dayTrades.filter((t:any) => t.result === 'WIN').length / dayTrades.length) * 100 : 0;
                             
