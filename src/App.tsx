@@ -5326,8 +5326,8 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
     });
 
     // Win rate by Direction
-    const shorts = trades.filter((t: any) => t.dir === 'Short');
-    const longs = trades.filter((t: any) => t.dir === 'Long');
+    const shorts = trades.filter((t: any) => t.dir === 'short');
+    const longs = trades.filter((t: any) => t.dir === 'long');
     const swr = shorts.length ? Math.round(shorts.filter((t: any) => t.result === 'win').length / shorts.length * 100) : 0;
     const lwr = longs.length ? Math.round(longs.filter((t: any) => t.result === 'win').length / longs.length * 100) : 0;
 
@@ -5514,22 +5514,127 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
       </div>
 
        {/* Psychology Heatmap */}
-       <div className="bg-spotify-card p-5 md:p-8 rounded-2xl border border-white/5">
-        <div className="mb-8">
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-1">Psychology Heatmap</h3>
-            <p className="text-sm font-bold text-white/60">P&L distribution across emotional states</p>
+<div className="bg-spotify-card p-5 md:p-8 rounded-2xl border border-white/5">
+  <div className="mb-8">
+    <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-1">Psychology Heatmap</h3>
+    <p className="text-sm font-bold text-white/60">P&L intensity across emotions & sessions</p>
+  </div>
+  <div className="w-full overflow-x-auto">
+    {(() => {
+      const sessions = ['Asia', 'London', 'New York'];
+      const emotions = [...new Set(trades.map((t: any) => t.emotion?.split('/')[0].trim()).filter(Boolean))];
+      
+      // Build emotion x session matrix
+      const matrix: any = {};
+      emotions.forEach(e => {
+        matrix[e] = {};
+        sessions.forEach(s => {
+          matrix[e][s] = { pnl: 0, count: 0, wins: 0 };
+        });
+      });
+      
+      trades.forEach((t: any) => {
+        const e = t.emotion?.split('/')[0].trim();
+        const s = t.session;
+        if (matrix[e] && matrix[e][s] !== undefined) {
+          const pnl = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+          matrix[e][s].pnl += pnl;
+          matrix[e][s].count++;
+          if (t.result === 'win') matrix[e][s].wins++;
+        }
+      });
+
+      // Find min/max for color scaling
+      const allPnls = emotions.flatMap(e => sessions.map(s => matrix[e][s].pnl));
+      const maxPnl = Math.max(...allPnls, 1);
+      const minPnl = Math.min(...allPnls, -1);
+
+      const getColor = (pnl: number, count: number) => {
+        if (count === 0) return 'rgba(255,255,255,0.03)';
+        if (pnl > 0) {
+          const intensity = Math.min(pnl / maxPnl, 1);
+          const g = Math.round(100 + intensity * 155);
+          return `rgba(29, ${g}, 84, ${0.3 + intensity * 0.7})`;
+        } else {
+          const intensity = Math.min(Math.abs(pnl) / Math.abs(minPnl), 1);
+          const r = Math.round(150 + intensity * 105);
+          return `rgba(${r}, 30, 30, ${0.3 + intensity * 0.7})`;
+        }
+      };
+
+      const getTextColor = (pnl: number, count: number) => {
+        if (count === 0) return 'rgba(255,255,255,0.15)';
+        return pnl >= 0 ? '#1DB954' : '#ff4444';
+      };
+
+      return (
+        <div className="space-y-3">
+          {/* Session headers */}
+          <div className="grid gap-2" style={{ gridTemplateColumns: `140px repeat(${sessions.length}, 1fr)` }}>
+            <div />
+            {sessions.map(s => (
+              <div key={s} className="text-center text-[10px] font-black uppercase tracking-widest text-white/40 pb-1">
+                {s}
+              </div>
+            ))}
+          </div>
+
+          {/* Heatmap rows */}
+          {emotions.map(emotion => (
+            <div key={emotion} className="grid gap-2 items-center" style={{ gridTemplateColumns: `140px repeat(${sessions.length}, 1fr)` }}>
+              <div className="text-[11px] font-black text-white/60 uppercase tracking-wider truncate pr-2">
+                {emotion}
+              </div>
+              {sessions.map(session => {
+                const cell = matrix[emotion][session];
+                const wr = cell.count > 0 ? Math.round(cell.wins / cell.count * 100) : 0;
+                return (
+                  <div
+                    key={session}
+                    className="relative rounded-xl p-3 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 cursor-default"
+                    style={{ 
+                      backgroundColor: getColor(cell.pnl, cell.count),
+                      minHeight: '72px',
+                      border: '1px solid rgba(255,255,255,0.05)'
+                    }}
+                    title={`${emotion} / ${session}: ${cell.count} trades, $${cell.pnl.toFixed(2)} P&L, ${wr}% WR`}
+                  >
+                    {cell.count === 0 ? (
+                      <span className="text-[10px] text-white/15 font-bold">—</span>
+                    ) : (
+                      <>
+                        <span className="text-[11px] font-black" style={{ color: getTextColor(cell.pnl, cell.count) }}>
+                          {cell.pnl >= 0 ? '+' : ''}{cell.pnl.toFixed(0)}$
+                        </span>
+                        <span className="text-[9px] text-white/40 font-bold">{wr}% WR</span>
+                        <span className="text-[9px] text-white/25">{cell.count}T</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {/* Legend */}
+          <div className="flex items-center justify-end gap-3 pt-4">
+            <span className="text-[9px] text-white/30 uppercase tracking-widest">Loss</span>
+            <div className="flex gap-0.5">
+              {[-1, -0.6, -0.3, 0.3, 0.6, 1].map((v, i) => (
+                <div
+                  key={i}
+                  className="w-6 h-3 rounded-sm"
+                  style={{ backgroundColor: getColor(v * (v < 0 ? Math.abs(minPnl) : maxPnl), 1) }}
+                />
+              ))}
+            </div>
+            <span className="text-[9px] text-white/30 uppercase tracking-widest">Profit</span>
+          </div>
         </div>
-        <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={analyticsChartData.emotionData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#181818', borderColor: '#333', color: '#fff', fontSize: '12px' }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="pnl" name="P&L" fill="#1DB954" radius={[4, 4, 0, 0]} />
-            </BarChart>
-            </ResponsiveContainer>
-        </div>
-      </div>
+      );
+    })()}
+  </div>
+</div>
       
       {/* Equity Curves Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
