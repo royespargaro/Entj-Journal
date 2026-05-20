@@ -609,15 +609,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const testConnection = async () => {
-      try {
-        await getDocFromServer(doc(db, '_connection_test', 'test'));
-      } catch (error) {
-        // Log but don't crash, Firestore might still be provisioning
-        console.warn("Firestore connectivity check:", error);
-      }
-    };
-    testConnection();
+   // connection test removed
 
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -2170,7 +2162,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
             </div>
           </div>
           
-          <div className="h-[250px] md:h-[300px] w-full mt-4 bg-black/20 rounded-2xl p-4 border border-white/5 backdrop-blur-sm">
+          <div className="h-[250px] md:h-[300px] w-full mt-4 bg-black/20 rounded-2xl p-4 border border-white/5 backdrop-blur-sm" style={{ minHeight: 250, minWidth: 0 }}>
             {dashboardChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                 <AreaChart data={dashboardChartData}>
