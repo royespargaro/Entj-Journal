@@ -1499,11 +1499,57 @@ If no anomaly: return exactly the word NULL`}]
               <p className="text-xs font-bold text-white">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
             </div>
             {user?.photoURL && (
-              <div className="relative group">
-                <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-white/10 group-hover:border-spotify-green transition-colors" alt="Profile" />
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-spotify-green rounded-full border-2 border-spotify-black" />
-              </div>
-            )}
+  <div className="relative">
+    {/* Avatar Button */}
+    <button
+      onClick={() => setProfileOpen(prev => !prev)}
+      className="relative group focus:outline-none"
+    >
+      <img
+        src={user.photoURL}
+        className="w-10 h-10 rounded-full border-2 border-white/10 group-hover:border-spotify-green transition-colors"
+        alt="Profile"
+      />
+      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-spotify-green rounded-full border-2 border-spotify-black" />
+    </button>
+
+    {/* Dropdown */}
+    {profileOpen && (
+      <>
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setProfileOpen(false)}
+        />
+
+        {/* Menu */}
+        <div className="absolute right-0 top-14 z-50 w-56 bg-[#130e08] border border-[#2a1a08] rounded-xl shadow-2xl overflow-hidden">
+          {/* User Info */}
+          <div className="px-4 py-3 border-b border-[#2a1a08]">
+            <p className="text-sm font-bold text-white truncate">
+              {user.displayName || 'Trader'}
+            </p>
+            <p className="text-xs text-[#7a6a58] truncate mt-0.5">
+              {user.email}
+            </p>
+          </div>
+
+          {/* Sign Out */}
+          <button
+            onClick={() => {
+              setProfileOpen(false);
+              logout();
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#e05555] hover:bg-[#1f0a0a] transition-colors text-left"
+          >
+            <LogOut size={15} />
+            Sign Out
+          </button>
+        </div>
+      </>
+    )}
+  </div>
+)}
           </div>
         </header>
 
