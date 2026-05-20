@@ -5338,6 +5338,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
 }`}>
   {(t.direction || t.dir) === 'Long' ? 'BUY' : 'SEL'}
 </div>
+<div>
 <p className="text-sm font-black text-white">{t.symbol || t.pair || 'Unknown'}</p>
                         <p className="text-[10px] font-bold text-spotify-muted uppercase tracking-widest">{t.time} • {t.setup || 'No Setup'}</p>
                       </div>
