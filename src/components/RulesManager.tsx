@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Info, Shield, DollarSign, Percent } from 'lucide-react';
 import { motion } from 'motion/react';
+import { X, Loader2, Save, AlertCircle, Info } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../App';
-import { CURRENCIES } from '../constants';
-import { convertCurrency } from '../lib/utils';
 import { Rules } from '../types';
+import { CURRENCIES } from '../constants';
+import { convertCurrency, formatCurrency } from '../lib/utils';
 
-interface RulesManagerProps {
-  isOpen: boolean;
-  onClose: () => void;
-  showToast: (msg: string, type?: 'success' | 'error') => void;
-  displayCurrency: string;
-}
-
+const SESSONS = ['Asia', 'London', 'New York'];
+const SETUPS = ["OB Bullish", "OB Bearish", "Breaker Block", "Mitigation Block", "FVG Bullish", "FVG Bearish", "IFVG", "Liquidity Sweep Long", "Liquidity Sweep Short", "Stop Hunt", "Equal Highs/Lows (EQH/EQL)", "BOS Long", "BOS Short", "CHoCH Long", "CHoCH Short", "MSS", "OTE (61.8-79% fib)", "PD Arrays", "NWOG/NDOG", "Silver Bullet", "Planned Strategy", "News Trade", "Custom"];
 const EMOTIONS = [
   'Calm / Confident',
   'Excited / Rushed',
@@ -28,10 +23,9 @@ const EMOTIONS = [
   'Greedy'
 ];
 
-const SESSIONS = ['Asia', 'London', 'New York'];
-const SETUPS = ['MSS + FVG', 'OB + SMT', 'Silver Bullet', 'London Open Sweep', 'NY PM Session'];
-
-export const RulesManager: React.FC<RulesManagerProps> = ({ isOpen, onClose, showToast, displayCurrency }) => {
+export const RulesManager = ({ isOpen, onClose, showToast, displayCurrency }: { isOpen: boolean, onClose: () => void, showToast: (msg: string, type?: 'success' | 'error') => void, displayCurrency: string }) => {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [rules, setRules] = useState<Rules>({
     maxDailyLoss: 0,
     maxDailyLossType: "$",
@@ -40,231 +34,178 @@ export const RulesManager: React.FC<RulesManagerProps> = ({ isOpen, onClose, sho
     maxTradesPerDay: 0,
     allowedSessions: [],
     allowedSetups: [],
-    flaggedEmotions: [],
+    blockedEmotions: [],
     noTradingDuringNews: false,
   });
 
   useEffect(() => {
-    if (!isOpen) return;
-    const fetchRules = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-      const snap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
-      if (snap.exists()) {
-        setRules(snap.data() as Rules);
-      }
-    };
-    fetchRules();
+    if (isOpen && auth.currentUser) {
+      const fetchRules = async () => {
+        try {
+          const docRef = doc(db, 'users', auth.currentUser!.uid, 'settings', 'rules');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setRules({ ...rules, ...docSnap.data() as Rules });
+          }
+        } catch (e) {
+            console.error(e);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchRules();
+    }
   }, [isOpen]);
 
-  const handleSave = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-    await setDoc(doc(db, 'users', user.uid, 'settings', 'rules'), rules);
-    showToast('Rules saved successfully');
-    onClose();
-  };
-
-  const toggleArrayItem = (array: string[], setter: any, item: string) => {
-    if (array.includes(item)) {
-      setter(array.filter(i => i !== item));
-    } else {
-      setter([...array, item]);
+  const saveRules = async () => {
+    if (!auth.currentUser) return;
+    setSaving(true);
+    try {
+      const docRef = doc(db, 'users', auth.currentUser.uid, 'settings', 'rules');
+      await setDoc(docRef, rules);
+      showToast('Rules saved successfully!', 'success');
+      onClose();
+    } catch (e) {
+      showToast('Failed to save rules', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
+  const toggleArrayItem = (key: keyof Rules, item: string) => {
+    setRules(prev => {
+        const arr = prev[key] as string[];
+        return {
+            ...prev,
+            [key]: arr.includes(item) ? arr.filter(i => i !== item) : [...arr, item]
+        };
+    });
+  }
+
   if (!isOpen) return null;
 
-  const calculatedLossAmount = rules.maxDailyLossType === '%' && rules.accountBalance > 0 && rules.maxDailyLoss > 0
-    ? (rules.accountBalance * rules.maxDailyLoss) / 100
-    : 0;
+  const calculatedLossAmount = rules.maxDailyLossType === '%' ? (rules.accountBalance * rules.maxDailyLoss / 100) : rules.maxDailyLoss;
+  const usdEquivalent = rules.maxDailyLossType === '%' ? convertCurrency(calculatedLossAmount, rules.accountCurrency, 'USD') : convertCurrency(rules.maxDailyLoss, rules.accountCurrency, 'USD');
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <motion.div initial={{ opacity: 0, scale: 0.9, y: 40 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 40 }} className="w-full max-w-2xl bg-[#0d0d0d] rounded-3xl shadow-2xl relative z-10 border border-white/10 overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-spotify-green/5 to-transparent">
-          <div>
-            <h2 className="text-2xl font-black tracking-tighter text-white">Rules Engine</h2>
-            <div className="h-1 w-12 bg-spotify-green mt-1 rounded-full" />
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-spotify-muted transition-all"><X size={24} /></button>
+    <div className="fixed inset-0 z-[300] bg-black/90 flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-spotify-card p-6 rounded-3xl w-full max-w-lg border border-white/10 space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center">
+          <h2 className="text-white font-black uppercase tracking-widest text-lg">Rules Engine</h2>
+          <button onClick={onClose} className="text-spotify-muted hover:text-white"><X size={20} /></button>
         </div>
+        {loading ? (
+            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-spotify-green" /></div>
+        ) : (
+            <div className="space-y-6">
+                <div>
+                     <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">Max Daily Loss</label>
+                     <div className="flex gap-2 mb-2">
+                        <input 
+                          type="number" 
+                          min="0"
+                          step="any"
+                          value={rules.maxDailyLoss || ''} 
+                          onFocus={(e) => e.target.select()}
+                          onChange={e => setRules({...rules, maxDailyLoss: Math.max(0, parseFloat(e.target.value) || 0)})} 
+                          className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm w-full outline-none" 
+                        />
+                        <button onClick={() => setRules({...rules, maxDailyLossType: rules.maxDailyLossType === '$' ? '%' : '$'})} className="bg-white/5 px-4 rounded-xl font-bold text-white text-sm">
+                            {rules.maxDailyLossType === '$' ? (CURRENCIES[rules.accountCurrency]?.symbol || '$') : '%'}
+                        </button>
+                    </div>
 
-        <div className="p-6 overflow-y-auto space-y-6">
-          {/* Info Banner */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-            <Info size={18} className="text-blue-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-white/60">These rules don't block your trading. When you log a trade, the AI automatically audits it against these rules and flags any violations.</p>
-          </div>
+                    <select value={rules.accountCurrency} onChange={e => setRules({...rules, accountCurrency: e.target.value})} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm w-full outline-none mb-4">
+                        {Object.entries(CURRENCIES).map(([code, config]: any) => (
+                           <option key={code} value={code} className="bg-black">{code} - {config.name}</option>
+                        ))}
+                    </select>
 
-          {/* Max Daily Loss */}
-          <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase tracking-widest text-spotify-muted">Max Daily Loss</label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={rules.maxDailyLoss || ''}
-                onChange={(e) => {
-                  let val = parseFloat(e.target.value);
-                  if (isNaN(val)) val = 0;
-                  if (val < 0) val = 0;
-                  setRules({ ...rules, maxDailyLoss: val });
-                }}
-                onFocus={(e) => e.target.select()}
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-spotify-green"
-                placeholder="0"
-              />
-              <button
-                onClick={() => setRules({ ...rules, maxDailyLossType: rules.maxDailyLossType === '$' ? '%' : '$' })}
-                className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-black text-sm"
-              >
-                {rules.maxDailyLossType === '$' ? (CURRENCIES[rules.accountCurrency]?.symbol || '$') : '%'}
-              </button>
-            </div>
-            
-            {/* Account Currency Selector */}
-            <div className="flex gap-2 items-center">
-              <span className="text-[9px] text-spotify-muted">Account Currency:</span>
-              <select
-                value={rules.accountCurrency}
-                onChange={(e) => setRules({ ...rules, accountCurrency: e.target.value })}
-                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white"
-              >
-                {Object.entries(CURRENCIES).map(([code, data]) => (
-                  <option key={code} value={code}>{data.symbol} {code}</option>
-                ))}
-              </select>
-            </div>
+                    {rules.maxDailyLossType === '%' && (
+                         <div className="mb-2">
+                            <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">Account Balance</label>
+                            <input 
+                                type="number" 
+                                min="0"
+                                step="any"
+                                value={rules.accountBalance || ''} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={e => setRules({...rules, accountBalance: Math.max(0, parseFloat(e.target.value) || 0)})} 
+                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm w-full outline-none" 
+                            />
+                         </div>
+                    )}
 
-            {/* Percentage mode: show account balance input */}
-            {rules.maxDailyLossType === '%' && (
-              <div className="mt-2">
-                <input
-                  type="number"
-                  value={rules.accountBalance || ''}
-                  onChange={(e) => {
-                    let val = parseFloat(e.target.value);
-                    if (isNaN(val)) val = 0;
-                    if (val < 0) val = 0;
-                    setRules({ ...rules, accountBalance: val });
-                  }}
-                  onFocus={(e) => e.target.select()}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-spotify-green"
-                  placeholder="Account Balance"
-                />
-              </div>
-            )}
+                    {(rules.maxDailyLoss > 0) && (
+                        <div className="bg-spotify-green/10 border border-spotify-green/20 p-3 rounded-xl text-spotify-green text-xs flex gap-2">
+                            <Info size={16} className="shrink-0"/>
+                            <div>
+                                {rules.maxDailyLossType === '$' ? (
+                                   <span>Fixed Stop: {CURRENCIES[rules.accountCurrency]?.symbol || '$'}{rules.maxDailyLoss} ({formatCurrency(usdEquivalent, 'USD')})</span>
+                                ) : (
+                                   <span>Percentage Risk: {rules.maxDailyLoss}% of {rules.accountCurrency} {rules.accountBalance} = {CURRENCIES[rules.accountCurrency]?.symbol || '$'}{calculatedLossAmount.toFixed(2)} ({formatCurrency(usdEquivalent, 'USD')})</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
 
-            {/* Calculated loss info */}
-            {calculatedLossAmount > 0 && (
-              <div className="bg-spotify-green/10 border border-spotify-green/20 rounded-xl p-3">
-                <p className="text-xs text-spotify-green">
-                  Max daily loss: {CURRENCIES[rules.accountCurrency]?.symbol}{calculatedLossAmount.toFixed(2)} {rules.accountCurrency}
-                  {' · '}
-                  ${convertCurrency(calculatedLossAmount, rules.accountCurrency, 'USD').toFixed(2)} USD
-                </p>
-              </div>
-            )}
-            {rules.maxDailyLossType === '$' && rules.maxDailyLoss > 0 && (
-              <p className="text-[9px] text-white/30">{CURRENCIES[rules.accountCurrency]?.symbol}{rules.maxDailyLoss} {rules.accountCurrency} max daily loss</p>
-            )}
-          </div>
+                <div>
+                     <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">Max Trades / Day</label>
+                     <input 
+                       type="number" 
+                       min="0"
+                       step="1"
+                       value={rules.maxTradesPerDay || ''} 
+                       onFocus={(e) => e.target.select()}
+                       onChange={e => setRules({...rules, maxTradesPerDay: Math.floor(Math.max(0, parseInt(e.target.value) || 0))})} 
+                       className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm w-full outline-none" 
+                     />
+                </div>
 
-          {/* Max Trades Per Day */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-spotify-muted">Max Trades Per Day</label>
-            <input
-              type="number"
-              value={rules.maxTradesPerDay || ''}
-              onChange={(e) => {
-                let val = parseInt(e.target.value);
-                if (isNaN(val)) val = 0;
-                if (val < 0) val = 0;
-                setRules({ ...rules, maxTradesPerDay: Math.floor(val) });
-              }}
-              onFocus={(e) => e.target.select()}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-spotify-green"
-              placeholder="0 = no limit"
-            />
-          </div>
+                <div>
+                    <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">Allowed Sessions</label>
+                    <div className="flex gap-2 flex-wrap">
+                        {SESSONS.map(s => (
+                            <button key={s} onClick={() => toggleArrayItem('allowedSessions', s)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${rules.allowedSessions.includes(s) ? 'bg-spotify-green text-black' : 'bg-white/5 text-white'}`}>
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                
+                <div>
+                     <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">Allowed Setups</label>
+                     <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        {SETUPS.map(s => (
+                            <button key={s} onClick={() => toggleArrayItem('allowedSetups', s)} className={`p-2 rounded-lg text-left transition-colors truncate ${rules.allowedSetups.includes(s) ? 'bg-spotify-green text-black' : 'bg-white/5 text-white'}`}>
+                                {s}
+                            </button>
+                        ))}
+                     </div>
+                </div>
 
-          {/* My Trading Sessions */}
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-spotify-muted">My Trading Sessions</label>
-              <p className="text-[9px] text-white/30 mt-0.5">Flag trades outside these sessions</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {SESSIONS.map(s => (
-                <button
-                  key={s}
-                  onClick={() => toggleArrayItem(rules.allowedSessions, (newArr: string[]) => setRules({ ...rules, allowedSessions: newArr }), s)}
-                  className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${rules.allowedSessions.includes(s) ? 'bg-spotify-green text-black' : 'bg-white/5 text-white/60'}`}
-                >
-                  {s}
+                <div>
+                    <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">Blocked Emotions</label>
+                    <div className="flex gap-2 flex-wrap">
+                        {EMOTIONS.map(e => (
+                             <button key={e} onClick={() => toggleArrayItem('blockedEmotions', e)} className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-colors ${rules.blockedEmotions.includes(e) ? 'bg-red-500 text-white' : 'bg-white/5 text-white'}`}>
+                                {e}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl">
+                    <label className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2"><AlertCircle size={16} /> Block during News</label>
+                    <input type="checkbox" checked={rules.noTradingDuringNews} onChange={e => setRules({...rules, noTradingDuringNews: e.target.checked})} className="toggle" />
+                </div>
+
+                <button onClick={saveRules} disabled={saving} className="w-full bg-spotify-green py-4 rounded-full font-black text-black flex items-center justify-center gap-2">
+                    {saving ? <Loader2 className="animate-spin" /> : <Save size={18} />} Save Rules
                 </button>
-              ))}
             </div>
-          </div>
-
-          {/* My A+ Setups */}
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-spotify-muted">My A+ Setups</label>
-              <p className="text-[9px] text-white/30 mt-0.5">Flag trades using setups not on this list</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {SETUPS.map(s => (
-                <button
-                  key={s}
-                  onClick={() => toggleArrayItem(rules.allowedSetups, (newArr: string[]) => setRules({ ...rules, allowedSetups: newArr }), s)}
-                  className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${rules.allowedSetups.includes(s) ? 'bg-spotify-green text-black' : 'bg-white/5 text-white/60'}`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Flag These Emotions */}
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-spotify-muted">Flag These Emotions</label>
-              <p className="text-[9px] text-white/30 mt-0.5">AI will flag trades logged with these emotional states</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {EMOTIONS.map(e => (
-                <button
-                  key={e}
-                  onClick={() => toggleArrayItem(rules.flaggedEmotions, (newArr: string[]) => setRules({ ...rules, flaggedEmotions: newArr }), e)}
-                  className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${rules.flaggedEmotions.includes(e) ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-white/5 text-white/60'}`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* News Toggle */}
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-            <div>
-              <p className="text-xs font-bold text-white">Flag news event trades</p>
-              <p className="text-[9px] text-white/30">AI will flag trades taken during high-impact news</p>
-            </div>
-            <button
-              onClick={() => setRules({ ...rules, noTradingDuringNews: !rules.noTradingDuringNews })}
-              className={`w-12 h-6 rounded-full transition-all ${rules.noTradingDuringNews ? 'bg-spotify-green' : 'bg-white/20'}`}
-            >
-              <div className={`w-5 h-5 rounded-full bg-white transition-all ${rules.noTradingDuringNews ? 'translate-x-6' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6 border-t border-white/5 flex gap-3">
-          <button onClick={onClose} className="flex-1 px-6 py-3 rounded-xl border border-white/10 text-white font-black text-xs uppercase tracking-widest hover:bg-white/5">Cancel</button>
-          <button onClick={handleSave} className="flex-1 bg-spotify-green text-black font-black text-xs uppercase tracking-widest py-3 rounded-xl hover:scale-[1.02] transition-all">Save Rules</button>
-        </div>
+        )}
       </motion.div>
     </div>
   );
