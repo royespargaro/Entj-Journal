@@ -5206,7 +5206,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
             <h2 className="text-sm md:text-lg font-black tracking-tighter w-40 text-center uppercase">{new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
             <button onClick={handleNext} disabled={viewYear === 2027 && viewMonth === 11} className="p-2 hover:bg-white/5 rounded-full text-spotify-muted transition-colors disabled:opacity-20"><ChevronRight size={20}/></button>
           </div>
-          <div className="flex gap-6 items-end">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 md:flex md:gap-6 md:items-end">
              <div>
                 <div className="text-[9px] text-spotify-muted tracking-[2px]">MONTHLY RESULT</div>
                 <div className={`text-[22px] font-bold ${monthUsdPnl >= 0 ? 'text-[#00C853]' : 'text-[#FF3C3C]'}`}>{monthUsdPnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(monthUsdPnl, 'USD', displayCurrency), displayCurrency)}</div>
@@ -5228,7 +5228,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
 
         <div className="overflow-x-auto w-full">
           <div className="grid grid-cols-7 md:grid-cols-[repeat(7,1fr)_120px] gap-px bg-white/5 w-full">
-            {dayHeaders.map(h => <div key={h} className="bg-black/40 p-2 text-[8px] md:text-[10px] text-spotify-muted text-center font-bold tracking-widest">{h}</div>)}
+            {dayHeaders.map(h => (   <div key={h} className="bg-black/40 p-2 text-[8px] md:text-[10px] text-spotify-muted text-center font-bold tracking-widest">     <span className="hidden md:inline">{h}</span>     <span className="md:hidden">{h[0]}</span>   </div> ))}
             <div className="bg-black/40 p-2 text-[8px] md:text-[10px] text-spotify-muted text-center font-bold tracking-widest hidden md:block">WEEK</div>
 
             {weeks.map((week, weekIdx) => {
@@ -5261,18 +5261,24 @@ function CalendarPage({ trades, displayCurrency }: any) {
                                        dayTrades.length > 0 ? 'border-white/10' : 'border-transparent';
                             
                             return (
-                              <div key={i} onClick={() => dayTrades.length > 0 && setSelectedDay({dateKey, dayTrades, pnl})} 
-                                   className={`min-h-[65px] md:min-h-[85px] p-2 relative ${bg} border ${br} ${isToday ? 'border-2 border-[#00C853] !bg-[#00C853]/[0.06] shadow-[0_0_16px_rgba(0,200,83,0.25)]' : ''}`}
+                              <div key={i} onClick={() => {   if (dayTrades.length > 0) {     const displayDate = new Date(d.year, d.month, d.date);     setSelectedDay({dateKey, dayTrades, pnl, displayDate});   } }} 
+                                   className={`min-h-[52px] md:min-h-[85px] p-1 md:p-2 relative ${bg} border ${br} ${isToday ? 'border-2 border-[#00C853] !bg-[#00C853]/[0.06] shadow-[0_0_16px_rgba(0,200,83,0.25)]' : ''}`}
                                    style={{ cursor: dayTrades.length > 0 ? 'pointer' : 'default' }}>
-                                   {isToday && <div className="absolute top-[6px] left-[8px] text-[8px] font-bold text-[#00C853] tracking-[1px]">TODAY</div>}
+                                   {isToday && <div className="hidden md:block absolute top-[6px] left-[8px] text-[8px] font-bold text-[#00C853] tracking-[1px]">TODAY</div>}
                                    {d.isCurrentMonth && <span className={`absolute top-2 right-2 text-[10px] ${!d.isCurrentMonth ? 'opacity-20' : 'text-spotify-muted'}`}>{d.date}</span>}
                                   {d.isCurrentMonth && dayTrades.length > 0 && (
-                                      <>
-                                          <span className={`absolute inset-0 flex items-center justify-center font-bold text-sm ${pnl >= 0 ? 'text-[#00C853]/90' : 'text-[#FF3C3C]/90'}`}>{formatCurrency(convertCurrency(pnl, 'USD', displayCurrency), displayCurrency)}</span>
-                                          <span className="absolute bottom-[8px] left-[8px] text-[11px] text-white/45">{dayTrades.length} trades</span>
-                                          <span className="absolute bottom-[8px] right-[8px] text-[11px] text-white/45">{winRate.toFixed(0)}%</span>
-                                      </>
-                                  )}
+  <>
+    <span className={`absolute inset-0 flex items-center justify-center font-bold text-xs md:text-sm ${pnl >= 0 ? 'text-[#00C853]/90' : 'text-[#FF3C3C]/90'}`}>
+      {Math.abs(pnl) >= 1000
+        ? `${pnl >= 0 ? '+' : '-'}$${(Math.abs(pnl)/1000).toFixed(1)}K`
+        : formatCurrency(convertCurrency(pnl, 'USD', displayCurrency), displayCurrency)
+      }
+    </span>
+    <span className="hidden md:block absolute bottom-[8px] left-[8px] text-[11px] text-white/45">{dayTrades.length} trades</span>
+    <span className="hidden md:block absolute bottom-[8px] right-[8px] text-[11px] text-white/45">{winRate.toFixed(0)}%</span>
+    <span className="md:hidden absolute bottom-[3px] left-0 right-0 text-center text-[9px] text-white/30">{dayTrades.length}t</span>
+  </>
+)}
                               </div>
                           );
                         })}
@@ -5297,7 +5303,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
       {selectedDay && (
         <Modal 
           onClose={() => setSelectedDay(null)} 
-          title={`${new Date(selectedDay.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
+          title={`${selectedDay.displayDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
           showFooter={false}
         >
           <div className="space-y-6">
@@ -5323,11 +5329,16 @@ function CalendarPage({ trades, displayCurrency }: any) {
                 {selectedDay.dayTrades.map((t: any) => (
                   <div key={t.id} className="bg-white/5 hover:bg-white/[0.08] p-4 rounded-xl border border-white/5 flex items-center justify-between transition-colors">
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-[10px] ${t.result === 'win' ? 'bg-spotify-green/20 text-spotify-green' : t.result === 'loss' ? 'bg-red-500/20 text-red-500' : 'bg-yellow-500/20 text-yellow-500'}`}>
-                        {t.dir === 'Long' ? 'BUY' : 'SEL'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-black text-white">{t.pair}</p>
+                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-[10px] ${
+  t.result === 'WIN' || t.result === 'win'
+    ? 'bg-spotify-green/20 text-spotify-green'
+    : t.result === 'LOSS' || t.result === 'loss'
+    ? 'bg-red-500/20 text-red-500'
+    : 'bg-yellow-500/20 text-yellow-500'
+}`}>
+  {(t.direction || t.dir) === 'Long' ? 'BUY' : 'SEL'}
+</div>
+<p className="text-sm font-black text-white">{t.symbol || t.pair || 'Unknown'}</p>
                         <p className="text-[10px] font-bold text-spotify-muted uppercase tracking-widest">{t.time} • {t.setup || 'No Setup'}</p>
                       </div>
                     </div>
