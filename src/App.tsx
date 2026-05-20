@@ -1949,23 +1949,51 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 slide-in-from-bottom-2">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 py-8 relative overflow-hidden rounded-3xl p-10 bg-spotify-card border border-white/5">
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
-        <div className="space-y-3 relative z-10">
-          <h1 className="text-4xl md:text-7xl font-black tracking-[-0.05em] text-white leading-[0.9] decoration-spotify-green decoration-2 md:decoration-4 underline-offset-4">
-            {greeting}, <span className="text-spotify-green italic">{firstName}</span>
-          </h1>
-          <div className="flex items-center gap-2 flex-wrap pt-2">
-            {sessionInfo.map(s => (
-              <div key={s.name} className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${s.bg} ${s.color} border border-current whitespace-nowrap flex items-center gap-1.5`}>
-                  {s.active && <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 bg-current rounded-full" />}
-                  {s.name}
-                </span>
-              </div>
-            ))}
+      {/* ── HERO ── */}
+<div className="relative overflow-hidden p-6 rounded-3xl bg-spotify-card border border-white/5"
+  style={{ boxShadow: '0 0 40px rgba(29,185,84,0.08)' }}>
+  <div className="flex items-center justify-between gap-4">
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">
+        {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+      </p>
+      <h1 className="text-3xl font-black tracking-tighter text-white leading-tight">
+        {greeting},<br />
+        <span className="text-spotify-green italic">{firstName}</span>
+      </h1>
+      <div className="flex items-center gap-2 flex-wrap pt-1">
+        {sessionInfo.map(s => (
+          <span key={s.name} className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${s.bg} ${s.color} border border-current flex items-center gap-1.5`}>
+            <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 bg-current rounded-full" />
+            {s.name}
+          </span>
+        ))}
+      </div>
+    </div>
+
+    {/* Portfolio inline */}
+    <div className="shrink-0 text-right">
+      <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-1">Portfolio</p>
+      <p className={`text-3xl font-black tracking-tighter ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
+        {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
+      </p>
+      {plan && (
+        <div className="mt-2 space-y-1">
+          <div className="h-1 w-24 bg-white/5 rounded-full overflow-hidden ml-auto">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.min(100, Math.max(0, (currentMonthPnl / plan.monthlyTarget) * 100))}%` }}
+              className="h-full bg-spotify-green"
+            />
           </div>
+          <p className="text-[9px] text-spotify-muted font-black uppercase tracking-widest">
+            {Math.round((currentMonthPnl / plan.monthlyTarget) * 100)}% of goal
+          </p>
         </div>
+      )}
+    </div>
+  </div>
+</div>
         <div className="bg-spotify-card border border-white/5 rounded-3xl p-8 backdrop-blur-xl shadow-none relative z-10 min-w-[240px]">
           <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-[10px] font-black text-spotify-muted uppercase tracking-[0.3em]">Portfolio</p>
