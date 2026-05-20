@@ -1867,7 +1867,6 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
     };
     fetchRules();
   }, [user]);
-  const { user, showToast } = useAuth();
   const firstName = user?.displayName?.split(' ')[0] || 'Trader';
 
   const handleShareTrade = onShareTrade;
