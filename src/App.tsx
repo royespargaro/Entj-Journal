@@ -729,6 +729,7 @@ export default function App() {
         {!user ? (
           <LoginPage key="login" />
         ) : (
+      const [profileOpen, setProfileOpen] = useState(false);
           <JournalApp 
             key="app" 
             onShareTrade={initiateShare} 
