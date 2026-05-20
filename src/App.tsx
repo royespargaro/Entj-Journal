@@ -1083,13 +1083,16 @@ const { user, showToast, logout } = useAuth();
   };
 
   // --- Calculations ---
-  const stats = useMemo(() => {
-    if (!trades) return { psychologyMap: [], sessionAnalytics: [], topSetups: [], setupPerformanceData: [], setupTrendData: [], sessionData: [], emotionData: [], newsData: [], };
+const stats = useMemo(() => {
+    if (!trades || !Array.isArray(trades) || trades.length === 0) return { 
+      n: 0, wins: 0, losses: 0, pnl: 0, planFollowed: 0, newsSlHits: 0, 
+      avgRR: '—', best: null, worst: null,
+      psychologyMap: [], sessionAnalytics: [], topSetups: [], 
+      setupPerformanceData: [], setupTrendData: [], sessionData: [], 
+      emotionData: [], newsData: [], expectancy: 0,
+      projection: { threeMonths: 0, sixMonths: 0, twelveMonths: 0 }
+    };
     const n = trades.length;
-    const wins = trades.filter(t => t.result === 'WIN').length;
-    const losses = trades.filter(t => t.result === 'LOSS').length;
-    const planFollowed = trades.filter(t => t.plan === 'yes').length;
-    const newsSlHits = trades.filter(t => t.news !== 'no' && t.result === 'LOSS').length;
     
     // Normalize all P&L to USD for internal stats
     const tradesWithUsdPnl = trades.map(t => ({
