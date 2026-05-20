@@ -44,7 +44,7 @@ import {
   Bell,
   FileText,
   Shield,
-  ShieldCheck
+  ShieldCheck,
   ShieldAlert,
   Info
 } from 'lucide-react';
