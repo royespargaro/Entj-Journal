@@ -737,7 +737,14 @@ export default function App() {
           />
         )}
       </AnimatePresence>
-      {/* ... Previous Share Modal ... */}
+      {sharingTrade && (
+  <ShareModal 
+    trade={sharingTrade} 
+    onClose={() => setSharingTrade(null)} 
+    user={user}
+    displayCurrency={displayCurrency}
+  />
+)}
       
       <AnimatePresence>
         {toast && (
