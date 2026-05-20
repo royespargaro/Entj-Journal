@@ -1948,99 +1948,66 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
   }, [trades]);
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-700 slide-in-from-bottom-2">
-
-  {/* ── HERO ── */}
-  <div className="relative overflow-hidden rounded-3xl border border-white/5 p-5"
-    style={{ background: 'rgba(18,18,18,0.6)', backdropFilter: 'blur(20px)', boxShadow: '0 0 40px rgba(29,185,84,0.06), 0 8px 32px rgba(0,0,0,0.8)' }}
-  >
-    {/* Subtle texture */}
-    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
-
-    <div className="relative z-10 flex items-start justify-between gap-4">
-
-      {/* Left — greeting + session */}
-      <div className="flex-1 min-w-0 space-y-2">
-        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-spotify-muted">
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-        </p>
-        <h1 className="text-2xl font-black tracking-tighter text-white leading-tight">
-          {greeting},<br />
-          <span className="text-spotify-green italic">{firstName}</span>
-        </h1>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {sessionInfo.map(s => (
-            <span
-              key={s.name}
-              className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${s.bg} ${s.color} border border-current flex items-center gap-1.5`}
-            >
-              {s.active && (
-                <motion.div
-                  animate={{ opacity: [0.4, 1, 0.4] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  className="w-1 h-1 bg-current rounded-full"
-                />
-              )}
-              {s.name}
-            </span>
-          ))}
+    <div className="space-y-10 animate-in fade-in duration-700 slide-in-from-bottom-2">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 py-8 relative overflow-hidden rounded-3xl p-10 bg-spotify-card border border-white/5">
+        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
+        <div className="space-y-3 relative z-10">
+          <h1 className="text-4xl md:text-7xl font-black tracking-[-0.05em] text-white leading-[0.9] decoration-spotify-green decoration-2 md:decoration-4 underline-offset-4">
+            {greeting}, <span className="text-spotify-green italic">{firstName}</span>
+          </h1>
+          <div className="flex items-center gap-2 flex-wrap pt-2">
+            {sessionInfo.map(s => (
+              <div key={s.name} className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${s.bg} ${s.color} border border-current whitespace-nowrap flex items-center gap-1.5`}>
+                  {s.active && <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 bg-current rounded-full" />}
+                  {s.name}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Right — portfolio number */}
-      <div className="shrink-0 text-right space-y-1">
-        <div className="flex items-center justify-end gap-1.5 mb-1">
-          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-spotify-muted">Portfolio</p>
-          {stats.n > 0 && (
-            <div className="flex items-center gap-0.5 text-[8px] font-black uppercase text-spotify-green">
-              <ChevronUp size={8} />
-              <span>Active</span>
-            </div>
-          )}
-        </div>
-        <p className={`text-3xl font-black tracking-tighter leading-none ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}
-          style={stats.pnl >= 0 ? { textShadow: '0 0 20px rgba(29,185,84,0.4)' } : {}}>
-          {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
-        </p>
-        {plan && (
-          <div className="space-y-1 pt-1">
-            <div className="flex justify-end">
-              <p className="text-[9px] font-mono font-bold text-white/40">
-                {Math.round((currentMonthPnl / (plan.monthlyTarget || 1)) * 100)}% of goal
+        <div className="bg-spotify-card border border-white/5 rounded-3xl p-8 backdrop-blur-xl shadow-none relative z-10 min-w-[240px]">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <p className="text-[10px] font-black text-spotify-muted uppercase tracking-[0.3em]">Portfolio</p>
+            {stats.n > 0 && (
+              <div className="flex items-center gap-1 text-[9px] font-black uppercase text-spotify-green">
+                <ChevronUp size={10} />
+                <span>Active</span>
+              </div>
+            )}
+          </div>
+          <p className={`text-4xl md:text-5xl font-black tracking-tighter ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
+            {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
+          </p>
+          <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[8px] font-bold text-white/30 uppercase tracking-widest">{plan ? 'Monthly Target' : 'Growth'}</p>
+              <p className="text-[10px] font-mono font-bold text-white/50">
+                {plan ? `${Math.round((currentMonthPnl / (plan.monthlyTarget || 1)) * 100)}%` : `+${Math.round(stats.wins / (stats.n || 1) * 100)}% WR`}
               </p>
             </div>
-            <div className="h-1 w-24 bg-white/5 rounded-full overflow-hidden ml-auto">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(100, Math.max(0, (currentMonthPnl / plan.monthlyTarget) * 100))}%` }}
-                className="h-full bg-spotify-green"
-                style={{ boxShadow: '0 0 8px rgba(29,185,84,0.5)' }}
-              />
-            </div>
+            {plan && (
+              <div className="space-y-1">
+                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, Math.max(0, (currentMonthPnl / plan.monthlyTarget) * 100))}%` }}
+                    className="h-full bg-spotify-green shadow-[0_0_8px_rgba(30,215,96,0.5)]" 
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[7px] font-black uppercase tracking-widest text-white/20">
+                  <span>Daily Goal: {formatCurrency(convertCurrency(plan.monthlyTarget / 20, 'USD', displayCurrency), displayCurrency)}</span>
+                  <span>{formatCurrency(convertCurrency(plan.monthlyTarget - currentMonthPnl, 'USD', displayCurrency), displayCurrency)} left</span>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
-
-    {/* Bottom row — 4 quick stats */}
-    <div className="relative z-10 grid grid-cols-4 gap-0 mt-4 pt-4 border-t border-white/5">
-      {[
-        { label: 'Trades',     value: String(stats.n) },
-        { label: 'Win Rate',   value: `${stats.n ? Math.round(stats.wins / stats.n * 100) : 0}%`, green: true },
-        { label: 'Discipline', value: `${stats.n ? Math.round(stats.planFollowed / stats.n * 100) : 0}%`, green: true },
-        { label: 'Avg R:R',    value: stats.avgRR === '—' ? '—' : `1:${stats.avgRR}` },
-      ].map((s, i) => (
-        <div key={s.label} className={`text-center ${i < 3 ? 'border-r border-white/5' : ''}`}>
-          <p className="text-[8px] font-black uppercase tracking-widest text-spotify-muted mb-1">{s.label}</p>
-          <p className={`text-base font-black tracking-tighter ${s.green ? 'text-spotify-green' : 'text-white'}`}>{s.value}</p>
         </div>
-      ))}
-    </div>
-  </div>
+      </div>
+      <div>
+      <KillZoneTicker />
+      </div>
 
-  {/* ── KILL ZONE TICKER ── */}
-  <KillZoneTicker />
-    
       {/* Rules Engine Strip */}
       {!hasRules ? (
         <motion.div
@@ -2354,7 +2321,13 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
           </div>
         </div>
       </div>
-      
+
+      <div className="bg-white/[0.02] rounded-3xl p-6 md:p-10 border border-white/5 relative overflow-hidden group">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-8 md:gap-y-0 relative z-10 transition-all duration-500">
+          <div className="flex flex-col items-center md:items-start md:border-r border-white/5 px-4 md:px-0 md:pr-12">
+            <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-3">Trades</p>
+            <p className="text-3xl font-black text-white tracking-tighter">{stats.n}</p>
+          </div>
           <div className="flex flex-col items-center md:items-start md:border-r border-white/5 px-4 md:px-12">
             <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-3">Win Rate</p>
             <p className="text-3xl font-black text-white tracking-tighter">
