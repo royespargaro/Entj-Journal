@@ -44,8 +44,7 @@ import {
   Bell,
   FileText,
   Shield,
-  ShieldCheck,
-  ShieldAlert
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
@@ -1022,28 +1021,7 @@ const { user, showToast, logout } = useAuth();
     });
     
     // Fetch user rules with fallback
-    let rulesString = `Trader's personal rules:
-- Max daily loss: 0
-- Max trades per day: No limit
-- Trading sessions: Any session
-- Flag these emotions: None specified
-- News event trades: Allowed
-- A+ setups: Not specified`;
-    try {
-        const rulesSnap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
-        if (rulesSnap.exists()) {
-            const r = rulesSnap.data() as Rules;
-            rulesString = `Trader's personal rules:
-- Max daily loss: ${r.maxDailyLoss}${r.maxDailyLossType} ${r.maxDailyLossType === '%' && r.accountBalance > 0 ? `(${CURRENCIES[r.accountCurrency]?.symbol || '$'}${((r.accountBalance * r.maxDailyLoss) / 100).toFixed(2)} ${r.accountCurrency})` : ''}
-- Max trades per day: ${r.maxTradesPerDay || 'No limit'}
-- Trading sessions: ${r.allowedSessions?.length > 0 ? r.allowedSessions.join(', ') : 'Any session'}
-- Flag these emotions: ${r.flaggedEmotions?.length > 0 ? r.flaggedEmotions.join(', ') : 'None specified'}
-- News event trades: ${r.noTradingDuringNews ? 'Flag these' : 'Allowed'}
-- A+ setups: ${r.allowedSetups?.length > 0 ? r.allowedSetups.join(', ') : 'Not specified'}`;
-        }
-    } catch (e) {
-        console.error("Rules fetch failed, using defaults", e);
-    }
+    let rulesPrompt = "Max daily loss: $50. Max 3 trades per day. Only trade London. No news trading.";
     try {
         const rulesSnap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
         if (rulesSnap.exists()) {
@@ -1059,7 +1037,7 @@ const { user, showToast, logout } = useAuth();
         model: 'llama-3.3-70b-versatile',
         messages: [{ 
           role: 'user', 
-          content: `Act as an expert trader. Audit this trade: ${rulesString}. 
+          content: `Act as an expert trader. Audit this trade:${rulesPrompt}. 
           Return ONLY JSON: {"ruleCompliance": ["string"], "performanceInsight": "string", "improvementHint": "string"}
           
           TRADE DETAILS:
@@ -1083,16 +1061,13 @@ const { user, showToast, logout } = useAuth();
   };
 
   // --- Calculations ---
-const stats = useMemo(() => {
-    if (!trades || !Array.isArray(trades) || trades.length === 0) return { 
-      n: 0, wins: 0, losses: 0, pnl: 0, planFollowed: 0, newsSlHits: 0, 
-      avgRR: '—', best: null, worst: null,
-      psychologyMap: [], sessionAnalytics: [], topSetups: [], 
-      setupPerformanceData: [], setupTrendData: [], sessionData: [], 
-      emotionData: [], newsData: [], expectancy: 0,
-      projection: { threeMonths: 0, sixMonths: 0, twelveMonths: 0 }
-    };
+  const stats = useMemo(() => {
+    if (!trades) return { psychologyMap: [], sessionAnalytics: [], topSetups: [], setupPerformanceData: [], setupTrendData: [], sessionData: [], emotionData: [], newsData: [], };
     const n = trades.length;
+    const wins = trades.filter(t => t.result === 'WIN').length;
+    const losses = trades.filter(t => t.result === 'LOSS').length;
+    const planFollowed = trades.filter(t => t.plan === 'yes').length;
+    const newsSlHits = trades.filter(t => t.news !== 'no' && t.result === 'LOSS').length;
     
     // Normalize all P&L to USD for internal stats
     const tradesWithUsdPnl = trades.map(t => ({
@@ -1851,25 +1826,8 @@ If no anomaly: return exactly the word NULL`}]
 
 // --- Page Components ---
 
-function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActivePage, plan, dailyGoals, onShareTrade, setups, onToggleExecute, setClosingSetup, chartType, setChartType, openRules }: { stats: any, trades: any, onTradeClick: any, displayCurrency: any, setActivePage: any, plan: any, dailyGoals?: string, onShareTrade: (t: Trade) => void, setups: DailySetup[], onToggleExecute: (id: string, current: string) => void, setClosingSetup: (s: DailySetup) => void, chartType: 'Area' | 'Line' | 'Bar', setChartType: (c: 'Area' | 'Line' | 'Bar') => void, openRules: () => void }) {
-  const { user } = useAuth();
-  const [hasRules, setHasRules] = useState(false);
-  const [rulesPreview, setRulesPreview] = useState<Rules | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    const fetchRules = async () => {
-      const snap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
-      if (snap.exists()) {
-        const data = snap.data() as Rules;
-        const hasAnyRule = data.maxDailyLoss > 0 || data.maxTradesPerDay > 0 ||
-                           data.allowedSessions?.length > 0 || data.flaggedEmotions?.length > 0;
-        setHasRules(hasAnyRule);
-        setRulesPreview(data);
-      }
-    };
-    fetchRules();
-  }, [user]);
+function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActivePage, plan, dailyGoals, onShareTrade, setups, onToggleExecute, setClosingSetup, chartType, setChartType }: { stats: any, trades: any, onTradeClick: any, displayCurrency: any, setActivePage: any, plan: any, dailyGoals?: string, onShareTrade: (t: Trade) => void, setups: DailySetup[], onToggleExecute: (id: string, current: string) => void, setClosingSetup: (s: DailySetup) => void, chartType: 'Area' | 'Line' | 'Bar', setChartType: (c: 'Area' | 'Line' | 'Bar') => void }) {
+  const { user, showToast } = useAuth();
   const firstName = user?.displayName?.split(' ')[0] || 'Trader';
 
   const handleShareTrade = onShareTrade;
@@ -2000,43 +1958,6 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
         </div>
       </div>
       <div>
-        <AnimatePresence>
-  {!hasRules ? (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-spotify-card border border-white/5 rounded-3xl p-8 relative overflow-hidden">
-        <div className="absolute top-4 right-4 flex items-center gap-2 text-[10px] text-spotify-green font-black uppercase tracking-widest"><div className="w-2 h-2 rounded-full bg-spotify-green animate-ping"></div> Setup required</div>
-        <ShieldAlert size={32} className="text-spotify-green mb-4" />
-        <h2 className="text-2xl font-black text-white mb-2">Your AI mentor is flying blind</h2>
-        <p className="text-sm text-white/60 mb-6">The Rules Engine connects your personal trading rules to every AI audit. Without it, the AI gives generic advice. With it, every trade gets judged against YOUR specific rules — automatically.</p>
-        <div className="space-y-3 mb-8">
-          <div className="flex items-center gap-2 text-sm text-white/80"><CheckCircle2 size={16} className="text-spotify-green"/> "Flag trades taken in the wrong emotional state"</div>
-          <div className="flex items-center gap-2 text-sm text-white/80"><CheckCircle2 size={16} className="text-spotify-green"/> "Identify sessions outside your trading plan"</div>
-          <div className="flex items-center gap-2 text-sm text-white/80"><CheckCircle2 size={16} className="text-spotify-green"/> "Spot setups that aren't in your A+ playbook"</div>
-        </div>
-        <button onClick={openRules} className="w-full bg-spotify-green py-4 rounded-full font-black text-black">Set Up Rules Engine →</button>
-    </motion.div>
-  ) : (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-spotify-card border border-spotify-green/20 rounded-3xl p-6 relative">
-      <div className="flex justify-between items-start mb-6">
-        <div className="flex items-center gap-3">
-          <ShieldCheck size={32} className="text-spotify-green"/>
-          <div>
-            <div className="font-bold text-white uppercase tracking-widest">Rules Engine</div>
-            <div className="text-xs text-spotify-muted">Active — AI audits every trade</div>
-          </div>
-        </div>
-        <button onClick={openRules} className="text-xs text-white/40 hover:text-white font-bold uppercase tracking-widest">Edit Rules</button>
-      </div>
-      <div className="flex gap-2 flex-wrap mb-4">
-        {rulesPreview?.maxDailyLoss! > 0 && <span className="bg-white/5 border border-white/10 text-white/60 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">Max loss: {rulesPreview?.maxDailyLossType}{rulesPreview?.maxDailyLoss}</span>}
-        {rulesPreview?.maxTradesPerDay! > 0 && <span className="bg-white/5 border border-white/10 text-white/60 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">Max {rulesPreview?.maxTradesPerDay} trades/day</span>}
-        {rulesPreview?.allowedSessions!.map(s => <span key={s} className="bg-spotify-green/10 border border-spotify-green/20 text-spotify-green rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">{s}</span>)}
-        {rulesPreview?.flaggedEmotions!.length! > 0 && <span className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">Flagging {rulesPreview?.flaggedEmotions.length} emotions</span>}
-        {rulesPreview?.noTradingDuringNews && <span className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">Flag news trades</span>}
-      </div>
-      <div className="text-[10px] text-white/30 uppercase tracking-widest">Every trade you log is automatically audited against these rules</div>
-    </motion.div>
-  )}
-</AnimatePresence>
         <KillZoneTicker />
       </div>
       

@@ -1,6 +1,8 @@
 export interface Rules {
   maxDailyLoss: number;
   maxDailyLossType: "$" | "%";
+  accountBalance: number;
+  accountCurrency: string;
   maxTradesPerDay: number;
   allowedSessions: string[];
   allowedSetups: string[];
