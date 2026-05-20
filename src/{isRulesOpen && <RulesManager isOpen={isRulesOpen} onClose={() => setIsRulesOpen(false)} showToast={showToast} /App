@@ -45,6 +45,8 @@ import {
   FileText,
   Shield,
   ShieldCheck
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
@@ -1003,62 +1005,83 @@ const { user, showToast, logout } = useAuth();
   }, [user]);
 
   const analyzeTrade = async (trade: Trade) => {
-    if (isAnalyzing) return;
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
+  if (isAnalyzing) return;
+  setIsAnalyzing(true);
+  setAiAnalysis(null);
 
-    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-    if (!apiKey) {
-      console.error("Groq API Key is missing");
-      showToast("AI Configuration Error: Missing API Key", "error");
-      setIsAnalyzing(false);
-      return;
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+  if (!apiKey) {
+    console.error("Groq API Key is missing");
+    showToast("AI Configuration Error: Missing API Key", "error");
+    setIsAnalyzing(false);
+    return;
+  }
+
+  const client = new Groq({
+    apiKey: apiKey,
+    dangerouslyAllowBrowser: true
+  });
+  
+  // Fetch user rules with fallback
+  let rulesString = "No personal rules configured yet.";
+  try {
+    const rulesSnap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
+    if (rulesSnap.exists()) {
+      const r = rulesSnap.data();
+      rulesString = `Trader's personal rules:
+- Max daily loss: ${r.maxDailyLoss}${r.maxDailyLossType} ${r.maxDailyLossType === '%' && r.accountBalance > 0 ? `(${CURRENCIES[r.accountCurrency]?.symbol || '$'}${((r.accountBalance * r.maxDailyLoss) / 100).toFixed(2)} ${r.accountCurrency})` : ''}
+- Max trades per day: ${r.maxTradesPerDay || 'No limit'}
+- Trading sessions: ${r.allowedSessions?.length > 0 ? r.allowedSessions.join(', ') : 'Any session'}
+- Flag these emotions: ${r.flaggedEmotions?.length > 0 ? r.flaggedEmotions.join(', ') : 'None specified'}
+- News event trades: ${r.noTradingDuringNews ? 'Flag these' : 'Allowed'}
+- A+ setups: ${r.allowedSetups?.length > 0 ? r.allowedSetups.join(', ') : 'Not specified'}`;
     }
+  } catch (e) {
+    console.error("Rules fetch failed, using fallback", e);
+  }
 
-    const client = new Groq({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true
+  try {
+    const response = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ 
+        role: 'user', 
+        content: `You are an elite prop desk trading mentor auditing this trade. The trader has defined personal rules below. Your job is to identify rule violations as FLAGS — never say the trade was blocked or prevented. For each violation, name the rule broken, explain the real cost of breaking it, and give one specific correction for next time. Be direct, honest, and educational. Reference actual numbers.
+
+${rulesString}
+
+TRADE DETAILS:
+- Pair: ${trade.pair}
+- Result: ${trade.result}
+- P&L: ${trade.pnl}
+- Setup: ${trade.setup}
+- Emotion: ${trade.emotion}
+- Session: ${trade.session}
+- Plan followed: ${trade.plan}
+- News impact: ${trade.news}
+
+Return ONLY a JSON object in this exact format:
+{
+  "ruleCompliance": ["string - violation description with cost"],
+  "performanceInsight": "string - what this trade teaches you",
+  "improvementHint": "string - one specific actionable fix"
+}`
+      }],
+      max_tokens: 800,
+      response_format: { type: "json_object" }
     });
+
+    const jsonString = response.choices[0]?.message?.content;
+    if (!jsonString) throw new Error("Empty response");
     
-    // Fetch user rules with fallback
-    let rulesPrompt = "Max daily loss: $50. Max 3 trades per day. Only trade London. No news trading.";
-    try {
-        const rulesSnap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
-        if (rulesSnap.exists()) {
-            const r = rulesSnap.data();
-            rulesPrompt = `User's personal trading rules: Max daily loss is ${r.maxDailyLossType}${r.maxDailyLoss}. Max ${r.maxTradesPerDay} trades per day. ${r.allowedSessions.length > 0 ? `Only trade ${r.allowedSessions.join(', ')} sessions. ` : ''}Never trade when emotional state is ${r.blockedEmotions.join(' or ')}. Allowed setups: ${r.allowedSetups.join(', ')}. ${r.noTradingDuringNews ? 'No trading during news events.' : ''}`;
-        }
-    } catch (e) {
-        console.error("Rules fetch failed, using defaults", e);
-    }
-
-    try {
-      const response = await client.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ 
-          role: 'user', 
-          content: `Act as an expert trader. Audit this trade:${rulesPrompt}. 
-          Return ONLY JSON: {"ruleCompliance": ["string"], "performanceInsight": "string", "improvementHint": "string"}
-          
-          TRADE DETAILS:
-          Pair: ${trade.pair}, Result: ${trade.result}, P&L: ${trade.pnl}, Setup: ${trade.setup}, Plan followed: ${trade.plan}`
-        }],
-        max_tokens: 800,
-        response_format: { type: "json_object" }
-      });
-
-      const jsonString = response.choices[0]?.message?.content;
-      if (!jsonString) throw new Error("Empty response");
-      
-      const analysis = JSON.parse(jsonString);
-      setAiAnalysis(`## 📋 Rule Compliance\n${analysis.ruleCompliance.map((r: string) => `- ${r}`).join('\n')}\n\n## 💡 Insight\n${analysis.performanceInsight}\n\n## 🚀 Next Step\n${analysis.improvementHint}`);
-    } catch (error: any) {
-      console.error("AI Analysis Error:", error);
-      showToast(`AI analysis failed: ${error.message || 'Unknown error'}`, "error");
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+    const analysis = JSON.parse(jsonString);
+    setAiAnalysis(`## 📋 Rule Audit\n${analysis.ruleCompliance.map((r: string) => `- ${r}`).join('\n')}\n\n## 💡 Insight\n${analysis.performanceInsight}\n\n## 🚀 Next Step\n${analysis.improvementHint}`);
+  } catch (error: any) {
+    console.error("AI Analysis Error:", error);
+    showToast(`AI analysis failed: ${error.message || 'Unknown error'}`, "error");
+  } finally {
+    setIsAnalyzing(false);
+  }
+};
 
   // --- Calculations ---
   const stats = useMemo(() => {
@@ -1561,6 +1584,7 @@ If no anomaly: return exactly the word NULL`}]
                 setClosingSetup={setClosingSetup}
                 chartType={chartType}
                 setChartType={setChartType}
+                openRules={() => setIsRulesOpen(true)} 
               />
             )}
             {activePage === 'log' && (
@@ -1669,7 +1693,6 @@ If no anomaly: return exactly the word NULL`}]
       {isLegalOpen && <LegalModal onClose={() => setIsLegalOpen(false)} type={legalType} />}
 
       {isRulesOpen && <RulesManager isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} showToast={showToast} displayCurrency={displayCurrency} />}
-
       {/* MT5 Import Modal */}
       {isImportOpen && (
         <MT5ImportModal 
@@ -1826,8 +1849,24 @@ If no anomaly: return exactly the word NULL`}]
 
 // --- Page Components ---
 
-function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActivePage, plan, dailyGoals, onShareTrade, setups, onToggleExecute, setClosingSetup, chartType, setChartType }: { stats: any, trades: any, onTradeClick: any, displayCurrency: any, setActivePage: any, plan: any, dailyGoals?: string, onShareTrade: (t: Trade) => void, setups: DailySetup[], onToggleExecute: (id: string, current: string) => void, setClosingSetup: (s: DailySetup) => void, chartType: 'Area' | 'Line' | 'Bar', setChartType: (c: 'Area' | 'Line' | 'Bar') => void }) {
-  const { user, showToast } = useAuth();
+function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActivePage, plan, dailyGoals, onShareTrade, setups, onToggleExecute, setClosingSetup, chartType, setChartType, openRules }: any) {  const { user, showToast } = useAuth();
+  const [hasRules, setHasRules] = useState(false);
+const [rulesPreview, setRulesPreview] = useState<any>(null);
+
+useEffect(() => {
+  if (!user) return;
+  const fetchRules = async () => {
+    const snap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
+    if (snap.exists()) {
+      const data = snap.data();
+      const hasAnyRule = data.maxDailyLoss > 0 || data.maxTradesPerDay > 0 ||
+                         data.allowedSessions?.length > 0 || data.flaggedEmotions?.length > 0;
+      setHasRules(hasAnyRule);
+      setRulesPreview(data);
+    }
+  };
+  fetchRules();
+}, [user]);
   const firstName = user?.displayName?.split(' ')[0] || 'Trader';
 
   const handleShareTrade = onShareTrade;
@@ -1960,6 +1999,100 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
       <div>
         <KillZoneTicker />
       </div>
+      {/* Rules Engine Section */}
+{!hasRules ? (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="bg-spotify-card border border-white/5 rounded-3xl p-8 relative overflow-hidden cursor-pointer"
+    onClick={openRules}
+  >
+    <div className="absolute top-4 right-4 flex items-center gap-2">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-spotify-green opacity-75"></span>
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-spotify-green"></span>
+      </span>
+      <span className="text-[9px] font-black text-spotify-green uppercase tracking-widest">Setup required</span>
+    </div>
+    
+    <ShieldAlert size={32} className="text-spotify-green mb-4" />
+    <h3 className="text-2xl font-black text-white mb-2">Your AI mentor is flying blind</h3>
+    <p className="text-sm text-white/60 mb-6 max-w-2xl">
+      The Rules Engine connects your personal trading rules to every AI audit. Without it, the AI gives generic advice. 
+      With it, every trade gets judged against YOUR specific rules — automatically.
+    </p>
+    
+    <div className="space-y-3 mb-8">
+      <div className="flex items-center gap-3">
+        <CheckCircle2 size={16} className="text-spotify-green" />
+        <span className="text-sm text-white/80">Flag trades taken in the wrong emotional state</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <CheckCircle2 size={16} className="text-spotify-green" />
+        <span className="text-sm text-white/80">Identify sessions outside your trading plan</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <CheckCircle2 size={16} className="text-spotify-green" />
+        <span className="text-sm text-white/80">Spot setups that aren't in your A+ playbook</span>
+      </div>
+    </div>
+    
+    <button className="w-full bg-spotify-green text-black font-black py-4 rounded-xl text-sm uppercase tracking-widest hover:scale-[1.02] transition-all">
+      Set Up Rules Engine →
+    </button>
+  </motion.div>
+) : (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="bg-spotify-card border border-spotify-green/20 rounded-3xl p-6 relative"
+  >
+    <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
+      <div className="flex items-center gap-3">
+        <ShieldCheck size={24} className="text-spotify-green" />
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-spotify-green">Rules Engine</p>
+          <p className="text-xs font-bold text-white">Active — AI audits every trade</p>
+        </div>
+      </div>
+      <button onClick={openRules} className="text-[10px] font-black text-spotify-muted hover:text-white transition-colors px-3 py-1.5 rounded-full border border-white/10">
+        Edit Rules
+      </button>
+    </div>
+
+    <div className="flex flex-wrap gap-2 mb-4">
+      {rulesPreview?.maxDailyLoss > 0 && (
+        <span className="bg-white/5 border border-white/10 text-white/60 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+          Max loss: {rulesPreview.maxDailyLoss}{rulesPreview.maxDailyLossType}
+        </span>
+      )}
+      {rulesPreview?.maxTradesPerDay > 0 && (
+        <span className="bg-white/5 border border-white/10 text-white/60 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+          Max {rulesPreview.maxTradesPerDay} trades/day
+        </span>
+      )}
+      {rulesPreview?.allowedSessions?.map((session: string) => (
+        <span key={session} className="bg-spotify-green/10 border border-spotify-green/20 text-spotify-green rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+          {session}
+        </span>
+      ))}
+      {rulesPreview?.flaggedEmotions?.length > 0 && (
+        <span className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+          Flagging {rulesPreview.flaggedEmotions.length} emotions
+        </span>
+      )}
+      {rulesPreview?.noTradingDuringNews && (
+        <span className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest">
+          Flag news trades
+        </span>
+      )}
+    </div>
+
+    <p className="text-[10px] text-white/30 uppercase tracking-widest">
+      Every trade you log is automatically audited against these rules
+    </p>
+  </motion.div>
+)}
       
       <AnimatePresence>
         <motion.div 
