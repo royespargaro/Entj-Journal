@@ -2043,7 +2043,6 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
   <KillZoneTicker />
     </div>
     </div>
-    </div>
     
       {/* Rules Engine Strip */}
       {!hasRules ? (
