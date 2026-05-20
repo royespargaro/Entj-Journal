@@ -510,7 +510,6 @@ export default function App() {
   const [displayCurrency, setDisplayCurrency] = useState<string>(() => {
     return localStorage.getItem('entj_display_currency') || 'USD';
   });
-  const [profileOpen, setProfileOpen] = useState(false);
   
   useEffect(() => {
     if (Notification.permission === 'default') {
@@ -843,8 +842,8 @@ function LoginPage() {
 }
 
 function JournalApp({ onShareTrade, displayCurrency, setDisplayCurrency }: { onShareTrade: (t: Trade) => void, displayCurrency: string, setDisplayCurrency: (c: string) => void }) {
-  const { user, showToast, logout } = useAuth();
-
+const { user, showToast, logout } = useAuth();
+  
   const [trades, setTrades] = useState<Trade[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [tradingPlan, setTradingPlan] = useState<TradingPlan | null>(null);
@@ -869,6 +868,7 @@ function JournalApp({ onShareTrade, displayCurrency, setDisplayCurrency }: { onS
   const [chartType, setChartType] = useState<'Area' | 'Line' | 'Bar'>('Area');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // Use prop-based displayCurrency
 
@@ -1502,33 +1502,37 @@ If no anomaly: return exactly the word NULL`}]
             {user?.photoURL && (
   <div className="relative">
     <button
-      onClick={() => setProfileOpen(!profileOpen)}
+      onClick={() => setProfileOpen(prev => !prev)}
       className="relative group focus:outline-none"
     >
-      <img 
-        src={user.photoURL} 
-        className="w-10 h-10 rounded-full border-2 border-white/10 group-hover:border-spotify-green transition-colors cursor-pointer" 
-        alt="Profile" 
+      <img
+        src={user.photoURL}
+        className="w-10 h-10 rounded-full border-2 border-white/10 group-hover:border-spotify-green transition-colors"
+        alt="Profile"
       />
       <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-spotify-green rounded-full border-2 border-spotify-black" />
     </button>
-    
+
     {profileOpen && (
       <>
-        <div 
+        <div
           className="fixed inset-0 z-40"
           onClick={() => setProfileOpen(false)}
         />
-        <div className="absolute right-0 mt-3 w-56 bg-spotify-card border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="p-4 border-b border-white/10">
-            <p className="text-sm font-bold text-white">{user.displayName || 'Trader'}</p>
-            <p className="text-[10px] text-spotify-muted mt-0.5">{user.email}</p>
+        <div className="absolute right-0 top-14 z-50 w-56 bg-spotify-card border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5">
+            <p className="text-sm font-bold text-white truncate">
+              {user.displayName || 'Trader'}
+            </p>
+            <p className="text-xs text-spotify-muted truncate mt-0.5">
+              {user.email}
+            </p>
           </div>
           <button
-            onClick={logout}
-            className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors flex items-center gap-2"
+            onClick={() => { setProfileOpen(false); logout(); }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 transition-colors text-left"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
             Sign Out
           </button>
         </div>
