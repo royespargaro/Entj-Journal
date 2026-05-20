@@ -6006,17 +6006,16 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
     const sessions = ['Asia', 'London', 'New York'];
     const sessionData = sessions.map(s => {
       const ts = trades.filter((t: any) => t.session === s);
-      const wr = ts.length ? Math.round(ts.filter((t: any) => t.result === 'win').length / ts.length * 100) : 0;
+      const wr = ts.length ? Math.round(ts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / ts.length * 100) : 0;
       const usdPnl = ts.reduce((sum: number, t: any) => sum + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
       return { name: s, wr: sanitize(wr), pnl: sanitize(usdPnl), count: ts.length };
     });
 
     // Win rate by Direction
-    const shorts = trades.filter((t: any) => t.dir === 'Short');
-    const longs = trades.filter((t: any) => t.dir === 'Long');
-    const swr = shorts.length ? Math.round(shorts.filter((t: any) => t.result === 'win').length / shorts.length * 100) : 0;
-    const lwr = longs.length ? Math.round(longs.filter((t: any) => t.result === 'win').length / longs.length * 100) : 0;
-
+    const shorts = trades.filter((t: any) => t.dir?.toLowerCase() === 'short');
+    const longs = trades.filter((t: any) => t.dir?.toLowerCase() === 'long');
+    const swr = shorts.length ? Math.round(shorts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / shorts.length * 100) : 0;
+    const lwr = longs.length ? Math.round(longs.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / longs.length * 100) : 0;
     // Emotions
     const emotionsMap: any = {};
     trades.forEach((t: any) => {
