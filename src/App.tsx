@@ -1088,8 +1088,8 @@ TRADE DETAILS:
   const stats = useMemo(() => {
     if (!trades) return { psychologyMap: [], sessionAnalytics: [], topSetups: [], setupPerformanceData: [], setupTrendData: [], sessionData: [], emotionData: [], newsData: [], };
     const n = trades.length;
-    const wins = trades.filter(t => t.result === 'WIN').length;
-    const losses = trades.filter(t => t.result === 'LOSS').length;
+    const wins = trades.filter(t => t.result?.toUpperCase() === 'WIN').length;
+const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
     const planFollowed = trades.filter(t => t.plan === 'yes').length;
     const newsSlHits = trades.filter(t => t.news !== 'no' && t.result === 'LOSS').length;
     
@@ -1118,7 +1118,7 @@ TRADE DETAILS:
       if (!psychologyRaw[e]) psychologyRaw[e] = { pnl: 0, count: 0, wins: 0 };
       psychologyRaw[e].pnl += t.usdPnl;
       psychologyRaw[e].count += 1;
-      if (t.result === 'win') psychologyRaw[e].wins += 1;
+      if (t.result?.toUpperCase() === 'WIN') psychologyRaw[e].wins += 1;
     });
     const psychologyMap = Object.entries(psychologyRaw).map(([emotion, data]) => ({
       emotion,
@@ -1134,7 +1134,7 @@ TRADE DETAILS:
       if (!sessionRaw[s]) sessionRaw[s] = { pnl: 0, count: 0, wins: 0 };
       sessionRaw[s].pnl += t.usdPnl;
       sessionRaw[s].count += 1;
-      if (t.result === 'win') sessionRaw[s].wins += 1;
+      if (t.result?.toUpperCase() === 'WIN') sessionRaw[s].wins += 1;
     });
     const sessionAnalytics = Object.entries(sessionRaw).map(([session, data]) => ({
       session,
@@ -6024,7 +6024,7 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
       if (!emotionsMap[e]) emotionsMap[e] = { win: 0, total: 0, pnl: 0 };
       emotionsMap[e].total++;
       emotionsMap[e].pnl += convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
-      if (t.result === 'win') emotionsMap[e].win++;
+      if (t.result?.toUpperCase() === 'WIN') emotionsMap[e].win++;
     });
     const emotionData = Object.entries(emotionsMap).map(([name, data]: any) => ({
       name,
@@ -6040,7 +6040,7 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
       if (!setupsMap[t.setup]) setupsMap[t.setup] = { win: 0, total: 0, pnl: 0 };
       setupsMap[t.setup].total++;
       setupsMap[t.setup].pnl += convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
-      if (t.result === 'win') setupsMap[t.setup].win++;
+      if (t.result?.toUpperCase() === 'WIN') setupsMap[t.setup].win++;
     });
     const setupPerformanceData = Object.entries(setupsMap).map(([name, data]: any) => ({
       name,
@@ -6226,7 +6226,7 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
           const pnl = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
           matrix[e][s].pnl += pnl;
           matrix[e][s].count++;
-          if (t.result === 'win') matrix[e][s].wins++;
+          if (t.result?.toUpperCase() === 'WIN') matrix[e][s].wins++;
         }
       });
 
