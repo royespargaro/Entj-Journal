@@ -1951,8 +1951,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
     <div className="space-y-4 animate-in fade-in duration-700 slide-in-from-bottom-2">
 
   {/* ── HERO ── */}
-  <div
-    className="relative overflow-hidden rounded-3xl border border-white/5 p-5"
+  <div className="relative overflow-hidden rounded-3xl border border-white/5 p-5"
     style={{ background: 'rgba(18,18,18,0.6)', backdropFilter: 'blur(20px)', boxShadow: '0 0 40px rgba(29,185,84,0.06), 0 8px 32px rgba(0,0,0,0.8)' }}
   >
     {/* Subtle texture */}
@@ -2041,8 +2040,6 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
   {/* ── KILL ZONE TICKER ── */}
   <KillZoneTicker />
-
-</div>
     
       {/* Rules Engine Strip */}
       {!hasRules ? (
