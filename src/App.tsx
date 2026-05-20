@@ -4449,362 +4449,846 @@ function BulkEditModal({ isOpen, onClose, onSave, count }: any) {
 }
 
 function HabitsPage({ trades, displayCurrency }: any) {
-  // Logic is now calculated in AnalyticsPage and passed? No, calculate it here or in App and pass down.
-  // Actually I'll move it back to App and pass it everywhere for consistency.
-  // Let's do that in a follow-up. For now, keep it here but reference the enhanced object.
+
+  // ── ARCHETYPE ENGINE ───────────────────────────────────────────────────────
+  const getArchetype = (score: number, streak: number, revengeTrades: number, winRate: number, avgRR: number) => {
+    if (revengeTrades >= 5 && score < 60) return {
+      level: 'Lvl 0 — Danger Zone', persona: 'The Gambler',
+      personaDesc: 'Impulse is driving your decisions, not strategy. Revenge trading is destroying your edge. Stop. Reset. Start with 1 rule only.',
+      icon: '🎰', color: 'text-red-500', borderColor: 'border-red-500/40', bgColor: 'bg-red-500/10',
+      glowColor: 'rgba(239,68,68,0.15)',
+      quest: 'Take 48 hours off. Come back and log 3 trades with zero revenge entries.',
+      nextLevel: 'Log 5 consecutive plan-following trades to escape this zone.',
+      scoreRange: '< 60 + 5 revenge trades'
+    };
+    if (score <= 25) return {
+      level: 'Lvl 1 — Unconscious Incompetence', persona: 'The Tourist',
+      personaDesc: "You don't yet know what you don't know. Every loss feels random. Every win feels like skill. Neither is true yet.",
+      icon: '🗺️', color: 'text-white/50', borderColor: 'border-white/10', bgColor: 'bg-white/[0.03]',
+      glowColor: 'rgba(255,255,255,0.05)',
+      quest: 'Log 10 trades. Any 10. Build the habit of recording before optimizing.',
+      nextLevel: 'Reach 26% discipline score to unlock The Apprentice.',
+      scoreRange: '0 – 25%'
+    };
+    if (score <= 40) return {
+      level: 'Lvl 2 — Conscious Incompetence', persona: 'The Apprentice',
+      personaDesc: "You now know you have gaps. You're aware of your rules but struggle to follow them under pressure. This is where 80% of traders quit.",
+      icon: '📖', color: 'text-orange-400', borderColor: 'border-orange-400/20', bgColor: 'bg-orange-400/5',
+      glowColor: 'rgba(251,146,60,0.12)',
+      quest: 'Follow your plan on 5 consecutive trades without a single deviation.',
+      nextLevel: 'Hit 41% overall score to become The Strategist.',
+      scoreRange: '26 – 40%'
+    };
+    if (score <= 52) return {
+      level: 'Lvl 3 — Pattern Recognition', persona: 'The Strategist',
+      personaDesc: 'You can identify setups but execution is inconsistent. You win when disciplined, lose when emotional. The market is teaching you.',
+      icon: '🧩', color: 'text-yellow-400', borderColor: 'border-yellow-400/20', bgColor: 'bg-yellow-400/5',
+      glowColor: 'rgba(250,204,21,0.12)',
+      quest: 'Achieve a win rate above 45% over your next 20 trades.',
+      nextLevel: 'Reach 53% score + reduce revenge trades to 0 to become The Tactician.',
+      scoreRange: '41 – 52%'
+    };
+    if (score <= 64) return {
+      level: 'Lvl 4 — Conscious Development', persona: 'The Tactician',
+      personaDesc: 'You have a real edge but discipline leaks under pressure. You know your rules — you just break them at critical moments. Close the gap.',
+      icon: '⚔️', color: 'text-blue-400', borderColor: 'border-blue-400/20', bgColor: 'bg-blue-400/5',
+      glowColor: 'rgba(96,165,250,0.12)',
+      quest: `Maintain ${Math.round(avgRR * 10) / 10}+ avg R:R for 15 consecutive trades.`,
+      nextLevel: 'Hit 65% score + 10-trade rule streak to become The Specialist.',
+      scoreRange: '53 – 64%'
+    };
+    if (score <= 74) return {
+      level: 'Lvl 5 — Conscious Competence', persona: 'The Specialist',
+      personaDesc: 'Solid and consistent. You execute your A-setups well and sit on your hands the rest of the time. Most traders never reach this.',
+      icon: '🎯', color: 'text-cyan-400', borderColor: 'border-cyan-400/20', bgColor: 'bg-cyan-400/5',
+      glowColor: 'rgba(34,211,238,0.12)',
+      quest: 'Go 10 trading days without a revenge trade.',
+      nextLevel: 'Hit 75% score + 20-trade discipline streak to become The Operator.',
+      scoreRange: '65 – 74%'
+    };
+    if (score <= 84) return {
+      level: 'Lvl 6 — Process Mastery', persona: 'The Operator',
+      personaDesc: "Process over outcome. You're no longer attached to individual trade results — only to whether you followed the system. This is institutional thinking.",
+      icon: '⚙️', color: 'text-purple-400', borderColor: 'border-purple-400/20', bgColor: 'bg-purple-400/5',
+      glowColor: 'rgba(192,132,252,0.12)',
+      quest: `Hold ${Math.round(winRate * 100)}%+ win rate over next 30 trades without changing your system.`,
+      nextLevel: 'Hit 85% score + zero revenge trades this month to unlock The Sniper.',
+      scoreRange: '75 – 84%'
+    };
+    if (score <= 93) return {
+      level: 'Lvl 7 — Unconscious Competence', persona: 'The Sniper',
+      personaDesc: 'Elite discipline and exceptional risk management. You wait for perfection and strike with precision. Fewer trades, higher quality. This is where real money lives.',
+      icon: '🔭', color: 'text-spotify-green', borderColor: 'border-spotify-green/30', bgColor: 'bg-spotify-green/10',
+      glowColor: 'rgba(29,185,84,0.15)',
+      quest: 'Identify and log only A+ setups for 30 consecutive days.',
+      nextLevel: 'Hit 94%+ score + 50-trade streak to achieve The Architect.',
+      scoreRange: '85 – 93%'
+    };
+    return {
+      level: 'Lvl 8 — System Architect', persona: 'The Architect',
+      personaDesc: 'You no longer trade. You execute a system. Risk is a calculation, not a feeling. Losses are data, not failure. You have built something that works without you.',
+      icon: '🏛️', color: 'text-amber-400', borderColor: 'border-amber-400/30', bgColor: 'bg-amber-400/10',
+      glowColor: 'rgba(251,191,36,0.15)',
+      quest: 'Mentor another trader. Document your full system. Scale to 10x.',
+      nextLevel: 'You have reached the pinnacle. Now build the next level yourself.',
+      scoreRange: '94 – 100%'
+    };
+  };
+
+  // ── STATS ENGINE ───────────────────────────────────────────────────────────
   const habitStats = useMemo(() => {
     if (trades.length === 0) return null;
 
-    // 1. Plan Adherence
-    const planTrades = trades.filter((t: any) => t.plan === 'yes' || t.plan === 'partial');
+    const sorted = [...trades].sort((a: any, b: any) =>
+      new Date(a.date + ' ' + (a.time || '00:00')).getTime() -
+      new Date(b.date + ' ' + (b.time || '00:00')).getTime()
+    );
+
+    // Core scores
+    const planTrades     = trades.filter((t: any) => t.plan === 'yes' || t.plan === 'partial');
     const adherenceScore = Math.round((planTrades.length / trades.length) * 100);
 
-    // 2. Risk Consistency 
-    const risks = trades.map((t: any) => parseFloat(t.riskPercent || '0'));
+    const risks   = trades.map((t: any) => parseFloat(t.riskPercent || '0'));
     const avgRisk = risks.reduce((a, b) => a + b, 0) / (risks.length || 1);
     const riskDev = Math.sqrt(risks.map(x => Math.pow(x - avgRisk, 2)).reduce((a, b) => a + b, 0) / (risks.length || 1));
     const riskScore = Math.max(0, Math.min(100, 100 - Math.round(riskDev * 50)));
 
-    // 3. Behavioral Streak
     let currentStreak = 0;
-    const sortedTrades = [...trades].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    for (const t of sortedTrades) {
+    for (const t of [...sorted].reverse()) {
       if (t.plan === 'yes') currentStreak++;
       else break;
     }
 
-    // 4. Performance Vector 
-    const wins = trades.filter((t: any) => cleanMoney(t.pnl) > 0);
-    const winRate = wins.length / trades.length;
-    
-    // R:R Analysis
+    const winsList  = trades.filter((t: any) => cleanMoney(t.pnl) > 0);
+    const lossList  = trades.filter((t: any) => cleanMoney(t.pnl) < 0);
+    const winRate   = winsList.length / trades.length;
+
+    const toUsd = (t: any) => convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+    const avgWin  = winsList.length  ? winsList.reduce((s: number, t: any)  => s + toUsd(t), 0) / winsList.length  : 0;
+    const avgLoss = lossList.length  ? Math.abs(lossList.reduce((s: number, t: any) => s + toUsd(t), 0)) / lossList.length : 0;
+    const expectedValue  = (avgWin * winRate) - (avgLoss * (1 - winRate));
+    const currentBalance = trades.reduce((s: number, t: any) => s + toUsd(t), 0);
+
+    const projectionData = Array.from({ length: 13 }, (_, i) => ({
+      month: `M${i}`, projected: currentBalance + (expectedValue * i * 20)
+    }));
+
     const rrs = trades.filter((t: any) => {
-      const e = cleanMoney(t.entry);
-      const s = cleanMoney(t.sl);
+      const e = cleanMoney(t.entry), s = cleanMoney(t.sl);
       return e > 0 && s > 0 && e !== s;
     }).map((t: any) => {
-      const e = cleanMoney(t.entry);
-      const x = cleanMoney(t.exit);
-      const s = cleanMoney(t.sl);
+      const e = cleanMoney(t.entry), x = cleanMoney(t.exit), s = cleanMoney(t.sl);
       return Math.abs(x - e) / Math.abs(e - s);
     });
-    const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 1;
-
-    // Projection Utility
-    const winTrades = trades.filter((t: any) => cleanMoney(t.pnl) > 0);
-    const lossTrades = trades.filter((t: any) => cleanMoney(t.pnl) < 0);
-    const avgWin = winTrades.length > 0 ? winTrades.reduce((a, b) => a + cleanMoney(b.pnl), 0) / winTrades.length : 0;
-    const avgLoss = lossTrades.length > 0 ? Math.abs(lossTrades.reduce((a, b) => a + cleanMoney(b.pnl), 0) / lossTrades.length) : 0;
-    const expectedValue = (avgWin * winRate) - (avgLoss * (1 - winRate));
-    
-    const currentBalance = trades.reduce((acc: number, t: any) => acc + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-    const projectionData = Array.from({ length: 13 }, (_, i) => ({
-      month: `M${i}`,
-      projected: currentBalance + (expectedValue * i * 20)
-    }));
+    const avgRR = rrs.length ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 1;
 
     const overallScore = Math.round((adherenceScore + riskScore + (winRate * 100)) / 3);
 
-    let persona = "The Novice";
-    let personaDesc = "You are just starting. Focus on sticking to your plan above all else.";
-    let level = "Lvl 1 - Conscious Incompetence";
-    
-    if (overallScore > 85) {
-      persona = "The Sniper";
-      personaDesc = "Elite discipline and exceptional risk management. You are on the path to master-level trading.";
-      level = "Lvl 4 - Unconscious Competence";
-    } else if (overallScore > 70) {
-      persona = "The Specialist";
-      personaDesc = "Consistent and steady. You have a solid grasp of your edge, keep fine-tuning.";
-      level = "Lvl 3 - Conscious Competence";
-    } else if (overallScore > 50) {
-      persona = "The Tactician";
-      personaDesc = "You have the tools but lack consistency. Discipline is your only bottleneck.";
-      level = "Lvl 2 - Conscious Development";
+    // Tilt detection
+    let consecutiveLosses = 0;
+    for (const t of [...sorted].reverse()) {
+      if (cleanMoney(t.pnl) < 0) consecutiveLosses++;
+      else break;
     }
 
-    return { 
-      adherenceScore, riskScore, winRate, overallScore, 
-      persona, personaDesc, level, projectionData, 
-      avgRR, currentStreak 
+    const tradesByDay: Record<string, number> = {};
+    trades.forEach((t: any) => { tradesByDay[t.date] = (tradesByDay[t.date] || 0) + 1; });
+    const overtradeDays  = Object.values(tradesByDay).filter(c => c >= 5).length;
+    const maxTradesInDay = Math.max(0, ...Object.values(tradesByDay));
+
+    let revengeTrades = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1], curr = sorted[i];
+      if (cleanMoney(prev.pnl) < 0 && curr.date === prev.date) {
+        const [ph, pm] = (prev.time || '00:00').split(':').map(Number);
+        const [ch, cm] = (curr.time || '00:00').split(':').map(Number);
+        if ((ch * 60 + cm) - (ph * 60 + pm) <= 15) revengeTrades++;
+      }
+    }
+
+    const isTilting  = consecutiveLosses >= 3;
+    const tiltScore  = Math.min(100, (consecutiveLosses * 20) + (revengeTrades * 10) + (overtradeDays * 5));
+
+    // Emotion P&L
+    const emotionMap: Record<string, { pnl: number; wins: number; losses: number; count: number }> = {};
+    trades.forEach((t: any) => {
+      const e = (t.emotion || 'Unknown').split('/')[0].trim();
+      if (!emotionMap[e]) emotionMap[e] = { pnl: 0, wins: 0, losses: 0, count: 0 };
+      const usd = toUsd(t);
+      emotionMap[e].pnl += usd; emotionMap[e].count++;
+      if (usd > 0) emotionMap[e].wins++; else if (usd < 0) emotionMap[e].losses++;
+    });
+    const emotionBreakdown = Object.entries(emotionMap)
+      .map(([emotion, d]) => ({ emotion, pnl: d.pnl, winRate: Math.round((d.wins / d.count) * 100), count: d.count, wins: d.wins, losses: d.losses, avgPnl: d.pnl / d.count }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    // Week over week
+    const now = new Date();
+    const thisWeekStart = new Date(now); thisWeekStart.setDate(now.getDate() - now.getDay());
+    const lastWeekStart = new Date(thisWeekStart); lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+    const thisWeekKey   = thisWeekStart.toISOString().split('T')[0];
+    const lastWeekKey   = lastWeekStart.toISOString().split('T')[0];
+
+    const weekStat = (arr: any[]) => {
+      if (!arr.length) return { pnl: 0, wr: 0, discipline: 0, count: 0, avgRR: 0 };
+      const pnl        = arr.reduce((s: number, t: any) => s + toUsd(t), 0);
+      const wr         = Math.round((arr.filter((t: any) => cleanMoney(t.pnl) > 0).length / arr.length) * 100);
+      const discipline = Math.round((arr.filter((t: any) => t.plan === 'yes').length / arr.length) * 100);
+      const weekRRs    = arr.filter((t: any) => cleanMoney(t.entry) > 0 && cleanMoney(t.sl) > 0).map((t: any) => Math.abs(cleanMoney(t.exit) - cleanMoney(t.entry)) / Math.abs(cleanMoney(t.entry) - cleanMoney(t.sl)));
+      const avgRR      = weekRRs.length ? weekRRs.reduce((a, b) => a + b, 0) / weekRRs.length : 0;
+      return { pnl, wr, discipline, count: arr.length, avgRR };
+    };
+
+    const thisWeek = weekStat(trades.filter((t: any) => t.date >= thisWeekKey));
+    const lastWeek = weekStat(trades.filter((t: any) => t.date >= lastWeekKey && t.date < thisWeekKey));
+    const weekDelta = { pnl: thisWeek.pnl - lastWeek.pnl, wr: thisWeek.wr - lastWeek.wr, discipline: thisWeek.discipline - lastWeek.discipline };
+
+    // Best hours
+    const hourMap: Record<number, { wins: number; total: number; pnl: number }> = {};
+    trades.forEach((t: any) => {
+      const h = parseInt((t.time || '00:00').split(':')[0]);
+      if (!hourMap[h]) hourMap[h] = { wins: 0, total: 0, pnl: 0 };
+      hourMap[h].total++; hourMap[h].pnl += toUsd(t);
+      if (cleanMoney(t.pnl) > 0) hourMap[h].wins++;
+    });
+    const hourStats = Object.entries(hourMap)
+      .map(([h, d]) => ({ hour: parseInt(h), wr: Math.round((d.wins / d.total) * 100), pnl: d.pnl, count: d.total }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    // Pair performance
+    const pairMap: Record<string, { pnl: number; wins: number; count: number }> = {};
+    trades.forEach((t: any) => {
+      const p = t.pair || 'Unknown';
+      if (!pairMap[p]) pairMap[p] = { pnl: 0, wins: 0, count: 0 };
+      pairMap[p].pnl += toUsd(t); pairMap[p].count++;
+      if (cleanMoney(t.pnl) > 0) pairMap[p].wins++;
+    });
+    const pairStats = Object.entries(pairMap)
+      .map(([pair, d]) => ({ pair, pnl: d.pnl, wr: Math.round((d.wins / d.count) * 100), count: d.count }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    // Session performance
+    const sessionMap: Record<string, { pnl: number; wins: number; count: number }> = {};
+    trades.forEach((t: any) => {
+      const s = t.session || 'Unknown';
+      if (!sessionMap[s]) sessionMap[s] = { pnl: 0, wins: 0, count: 0 };
+      sessionMap[s].pnl += toUsd(t); sessionMap[s].count++;
+      if (cleanMoney(t.pnl) > 0) sessionMap[s].wins++;
+    });
+    const sessionStats = Object.entries(sessionMap)
+      .map(([session, d]) => ({ session, pnl: d.pnl, wr: Math.round((d.wins / d.count) * 100), count: d.count }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    // Daily P&L for sparkline
+    const dailyMap: Record<string, number> = {};
+    trades.forEach((t: any) => { dailyMap[t.date] = (dailyMap[t.date] || 0) + toUsd(t); });
+    const dailyPnlData = Object.entries(dailyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, pnl]) => ({ date, pnl }));
+
+    // Max drawdown
+    let peak = 0, maxDD = 0, running = 0;
+    sorted.forEach((t: any) => {
+      running += toUsd(t);
+      if (running > peak) peak = running;
+      const dd = peak - running;
+      if (dd > maxDD) maxDD = dd;
+    });
+
+    // Setup performance
+    const setupMap: Record<string, { pnl: number; wins: number; count: number }> = {};
+    trades.forEach((t: any) => {
+      if (!t.setup) return;
+      if (!setupMap[t.setup]) setupMap[t.setup] = { pnl: 0, wins: 0, count: 0 };
+      setupMap[t.setup].pnl += toUsd(t); setupMap[t.setup].count++;
+      if (cleanMoney(t.pnl) > 0) setupMap[t.setup].wins++;
+    });
+    const setupStats = Object.entries(setupMap)
+      .map(([setup, d]) => ({ setup, pnl: d.pnl, wr: Math.round((d.wins / d.count) * 100), count: d.count }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    const archetype = getArchetype(overallScore, currentStreak, revengeTrades, winRate, avgRR);
+    const { level, persona, personaDesc } = archetype;
+
+    return {
+      adherenceScore, riskScore, winRate, overallScore, persona, personaDesc, level,
+      projectionData, avgRR, currentStreak, emotionBreakdown,
+      consecutiveLosses, revengeTrades, overtradeDays, maxTradesInDay, isTilting, tiltScore,
+      thisWeek, lastWeek, weekDelta, hourStats, pairStats, sessionStats, dailyPnlData,
+      avgWin, avgLoss, expectedValue, maxDD, setupStats, archetype
     };
   }, [trades]);
 
-  if (!habitStats) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Brain size={48} className="text-spotify-muted mb-4 opacity-20" />
-        <h2 className="text-xl font-black text-white mb-2">Not Enough Data</h2>
-        <p className="text-spotify-muted text-sm max-w-xs">Log at least one trade to see your habit analysis and future projection.</p>
-      </div>
-    );
-  }
+  if (!habitStats) return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <Brain size={48} className="text-spotify-muted mb-4 opacity-20" />
+      <h2 className="text-xl font-black text-white mb-2">Not Enough Data</h2>
+      <p className="text-spotify-muted text-sm max-w-xs">Log at least one trade to activate your habit analysis.</p>
+    </div>
+  );
+
+  const {
+    adherenceScore, riskScore, winRate, overallScore, currentStreak,
+    emotionBreakdown, consecutiveLosses, revengeTrades, overtradeDays,
+    isTilting, tiltScore, thisWeek, lastWeek, weekDelta, hourStats,
+    pairStats, sessionStats, dailyPnlData, avgWin, avgLoss,
+    expectedValue, maxDD, setupStats, projectionData, avgRR,
+    archetype
+  } = habitStats;
+
+  const { level, persona, personaDesc } = archetype;
+  const deltaColor  = (v: number) => v > 0 ? 'text-spotify-green' : v < 0 ? 'text-red-400' : 'text-white/30';
+  const deltaArrow  = (v: number) => v > 0 ? '▲' : v < 0 ? '▼' : '—';
+  const toDisp      = (usd: number) => formatCurrency(convertCurrency(usd, 'USD', displayCurrency), displayCurrency);
+
+  const ARCHETYPES_LIST = [
+    { id: 0, name: 'The Gambler',    icon: '🎰', sub: 'Danger Zone',              color: 'text-red-500'       },
+    { id: 1, name: 'The Tourist',    icon: '🗺️', sub: 'Unconscious Incompetence', color: 'text-white/30'      },
+    { id: 2, name: 'The Apprentice', icon: '📖', sub: 'Conscious Incompetence',   color: 'text-orange-400'    },
+    { id: 3, name: 'The Strategist', icon: '🧩', sub: 'Pattern Recognition',      color: 'text-yellow-400'    },
+    { id: 4, name: 'The Tactician',  icon: '⚔️', sub: 'Conscious Development',    color: 'text-blue-400'      },
+    { id: 5, name: 'The Specialist', icon: '🎯', sub: 'Conscious Competence',     color: 'text-cyan-400'      },
+    { id: 6, name: 'The Operator',   icon: '⚙️', sub: 'Process Mastery',          color: 'text-purple-400'    },
+    { id: 7, name: 'The Sniper',     icon: '🔭', sub: 'Unconscious Competence',   color: 'text-spotify-green' },
+    { id: 8, name: 'The Architect',  icon: '🏛️', sub: 'System Architect',         color: 'text-amber-400'     },
+  ];
+
+  const currentLevelId = parseInt(archetype.level.match(/Lvl (\d+)/)?.[1] || '0');
 
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="space-y-2">
-          <p className="text-[10px] font-black uppercase text-spotify-green tracking-[0.3em] mb-1">{habitStats.level}</p>
-          <h2 className="text-4xl font-black text-white tracking-tighter">{habitStats.persona}</h2>
-          <p className="text-spotify-muted text-sm mt-1 max-w-md">{habitStats.personaDesc}</p>
-        </div>
-        <div className="flex gap-4">
-           <div className="bg-white/5 px-6 py-4 rounded-2xl border border-white/5 text-center">
-            <p className="text-[10px] font-black uppercase text-spotify-muted tracking-widest mb-1">Discipline Score</p>
-            <p className={`text-4xl font-black ${habitStats.overallScore > 70 ? 'text-spotify-green' : habitStats.overallScore > 40 ? 'text-yellow-500' : 'text-red-500'}`}>
-              {habitStats.overallScore}%
-            </p>
-          </div>
-          <div className="bg-spotify-green/10 px-6 py-4 rounded-2xl border border-spotify-green/20 text-center">
-            <p className="text-[10px] font-black uppercase text-spotify-green tracking-widest mb-1">Rule Streak</p>
-            <p className="text-4xl font-black text-white flex items-center justify-center gap-2">
-              <Zap size={24} className="text-spotify-green" fill="currentColor" />
-              {habitStats.currentStreak}
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-6 pb-24">
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
-        {[
-          { id: 1, name: 'Conscious Incompetence', icon: '🌑', goal: 'Follow a Plan' },
-          { id: 2, name: 'Conscious Development', icon: '🌗', goal: 'Manage Risk' },
-          { id: 3, name: 'Conscious Competence', icon: '🌕', goal: 'Consistency' },
-          { id: 4, name: 'Unconscious Competence', icon: '✨', goal: 'Scaling' }
-        ].map((stage) => {
-          const stageId = stage.id;
-          const currentLevelId = parseInt(habitStats.level.match(/Lvl (\d+)/)?.[1] || '0');
-          const isActive = currentLevelId === stageId;
-          const isPast = currentLevelId > stageId;
-          
-          return (
-            <div key={stageId} className={`p-4 rounded-2xl border transition-all relative overflow-hidden ${isActive ? 'bg-spotify-green text-black border-spotify-green' : isPast ? 'bg-white/10 border-white/10 opacity-60' : 'bg-white/5 border-white/5 opacity-30'}`}>
-              {isActive && (
-                <div className="absolute top-0 right-0 p-2 opacity-20">
-                  <Target size={40} />
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{stage.icon}</span>
-                <div className="min-w-0">
-                  <p className="text-[8px] font-black uppercase tracking-widest opacity-60">Stage 0{stage.id}</p>
-                  <p className="text-[10px] font-black truncate">{stage.name}</p>
-                  <p className="text-[9px] font-bold opacity-60 mt-0.5">Focus: {stage.goal}</p>
-                </div>
+      {/* ── HERO ARCHETYPE CARD ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className={`relative overflow-hidden rounded-3xl border ${archetype.borderColor} p-8 md:p-10`}
+        style={{ background: `radial-gradient(ellipse at top right, ${archetype.glowColor} 0%, transparent 60%), #0d0d0d` }}
+      >
+        {/* Watermark icon */}
+        <div className="absolute -right-4 -top-4 text-[160px] opacity-[0.06] leading-none select-none pointer-events-none">
+          {archetype.icon}
+        </div>
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="space-y-3 flex-1">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{archetype.icon}</span>
+              <div>
+                <p className={`text-[10px] font-black uppercase tracking-[0.35em] ${archetype.color}`}>{level}</p>
+                <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter leading-none">{persona}</h1>
               </div>
             </div>
-          );
-        })}
+            <p className="text-spotify-muted text-sm leading-relaxed max-w-lg">{personaDesc}</p>
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${archetype.borderColor} ${archetype.bgColor}`}>
+              <Target size={12} className={archetype.color} />
+              <p className={`text-[10px] font-black uppercase tracking-widest ${archetype.color}`}>
+                Quest: {archetype.quest}
+              </p>
+            </div>
+          </div>
+
+          {/* Score cluster */}
+          <div className="grid grid-cols-3 gap-3 shrink-0">
+            {[
+              { label: 'Score', value: `${overallScore}%`, accent: true },
+              { label: 'Streak', value: currentStreak, icon: <Zap size={14} fill="currentColor" className={archetype.color} /> },
+              { label: 'Win Rate', value: `${Math.round(winRate * 100)}%` }
+            ].map((s, i) => (
+              <div key={i} className={`rounded-2xl p-4 md:p-5 text-center border ${s.accent ? archetype.borderColor + ' ' + archetype.bgColor : 'border-white/5 bg-white/[0.03]'}`}>
+                <p className="text-[8px] font-black uppercase tracking-widest text-spotify-muted mb-2">{s.label}</p>
+                <p className={`text-2xl md:text-3xl font-black ${s.accent ? archetype.color : 'text-white'} flex items-center justify-center gap-1`}>
+                  {s.icon}{s.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── TILT STATUS ── */}
+      {isTilting ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="relative overflow-hidden rounded-3xl border border-red-500/40 p-6 md:p-8"
+          style={{ background: 'radial-gradient(ellipse at top right, rgba(239,68,68,0.12) 0%, transparent 60%), #0d0d0d' }}
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-red-500/20 rounded-2xl shrink-0">
+                <AlertTriangle size={24} className="text-red-500" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-500 mb-1">⚠ Tilt Alert Active</p>
+                <h3 className="text-2xl font-black text-white">{consecutiveLosses}-Loss Streak Detected</h3>
+                <p className="text-sm text-red-400/70 mt-1 max-w-md">
+                  Traders on tilt statistically lose {Math.round(consecutiveLosses * 23)}% more on their next trade. Step away. Reset. Come back with a clear head.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 shrink-0">
+              {[
+                { label: 'Loss Streak', value: consecutiveLosses, bad: consecutiveLosses >= 3 },
+                { label: 'Revenge Trades', value: revengeTrades, bad: revengeTrades > 0 },
+                { label: 'Overtrade Days', value: overtradeDays, bad: overtradeDays > 0 }
+              ].map(s => (
+                <div key={s.label} className="bg-black/40 rounded-xl p-3 text-center border border-red-500/20">
+                  <p className={`text-2xl font-black ${s.bad ? 'text-red-400' : 'text-white'}`}>{s.value}</p>
+                  <p className="text-[9px] font-black uppercase text-red-500/50 tracking-widest mt-1 leading-tight">{s.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      ) : (
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 flex flex-col md:flex-row md:items-center gap-6">
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="p-3 bg-spotify-green/10 rounded-2xl">
+              <ShieldCheck size={22} className="text-spotify-green" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-spotify-green tracking-widest">Mental State</p>
+              <p className="text-lg font-black text-white">Clear Mind — Ready to Trade</p>
+            </div>
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex justify-between text-[10px] font-black uppercase text-spotify-muted">
+              <span>Tilt Risk</span>
+              <span className="text-spotify-green">{Math.max(0, 100 - tiltScore)}% Safe Zone</span>
+            </div>
+            <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+              <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max(0, 100 - tiltScore)}%` }}
+                transition={{ duration: 1 }} className="h-full bg-spotify-green rounded-full" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-5 shrink-0 text-center">
+            {[
+              { label: 'Loss Streak', value: consecutiveLosses, good: consecutiveLosses < 3 },
+              { label: 'Revenge', value: revengeTrades, good: revengeTrades === 0 },
+              { label: 'Overtrade Days', value: overtradeDays, good: overtradeDays === 0 }
+            ].map(s => (
+              <div key={s.label}>
+                <p className={`text-2xl font-black ${s.good ? 'text-spotify-green' : 'text-yellow-500'}`}>{s.value}</p>
+                <p className="text-[9px] font-black uppercase text-spotify-muted tracking-widest leading-tight mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── WEEK OVER WEEK ── */}
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Week over Week</h3>
+          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-spotify-muted">
+            <div className="w-2 h-2 rounded-full bg-spotify-green animate-pulse" />
+            Live Comparison
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'P&L', thisVal: toDisp(thisWeek.pnl), lastVal: toDisp(lastWeek.pnl), delta: weekDelta.pnl, fmt: (v: number) => toDisp(Math.abs(v)) },
+            { label: 'Win Rate', thisVal: `${thisWeek.wr}%`, lastVal: `${lastWeek.wr}%`, delta: weekDelta.wr, fmt: (v: number) => `${Math.abs(v)}%` },
+            { label: 'Discipline', thisVal: `${thisWeek.discipline}%`, lastVal: `${lastWeek.discipline}%`, delta: weekDelta.discipline, fmt: (v: number) => `${Math.abs(v)}%` },
+            { label: 'Trades', thisVal: thisWeek.count, lastVal: lastWeek.count, delta: thisWeek.count - lastWeek.count, fmt: (v: number) => `${Math.abs(v)}` }
+          ].map(m => (
+            <div key={m.label} className="bg-black/30 rounded-2xl p-5 border border-white/5 space-y-3">
+              <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted">{m.label}</p>
+              <div className="space-y-1">
+                <p className="text-[9px] text-white/20 uppercase tracking-widest">Last week</p>
+                <p className="text-sm font-black text-white/30">{m.lastVal || '—'}</p>
+              </div>
+              <div>
+                <p className="text-[9px] text-white/40 uppercase tracking-widest mb-0.5">This week</p>
+                <p className="text-2xl font-black text-white">{m.thisVal || '—'}</p>
+              </div>
+              <div className={`flex items-center gap-1.5 text-[10px] font-black ${deltaColor(m.delta)}`}>
+                <span>{deltaArrow(m.delta)}</span>
+                <span>{m.fmt(m.delta)} vs last week</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
+      {/* ── EMOTION P&L BREAKDOWN ── */}
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Emotion → P&L Breakdown</h3>
+            <p className="text-xs text-white/30 mt-1">Which mental state is your edge — and which is your enemy?</p>
+          </div>
+        </div>
+        {emotionBreakdown.length === 0 ? (
+          <p className="text-center text-spotify-muted text-xs py-8">No emotion data yet. Log your emotional state when adding trades.</p>
+        ) : (
+          <div className="space-y-5">
+            {emotionBreakdown.map((e, i) => {
+              const maxAbs  = Math.max(...emotionBreakdown.map(x => Math.abs(x.pnl)), 1);
+              const barPct  = Math.abs(e.pnl) / maxAbs * 100;
+              const isPos   = e.pnl >= 0;
+              return (
+                <motion.div key={e.emotion} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }} className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[9px] font-black text-white/20 w-4 tabular-nums">#{i + 1}</span>
+                      <span className="text-sm font-black text-white">{e.emotion}</span>
+                      <span className="text-[9px] font-bold text-spotify-muted">{e.count} trades · {e.winRate}% WR · avg {toDisp(e.avgPnl)}</span>
+                    </div>
+                    <span className={`text-sm font-black font-mono ${isPos ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {isPos ? '+' : ''}{toDisp(e.pnl)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${barPct}%` }} transition={{ duration: 0.8, delay: i * 0.06 }}
+                      className={`h-full rounded-full ${isPos ? 'bg-spotify-green' : 'bg-red-500'}`} />
+                  </div>
+                  <div className="flex gap-4 text-[9px] font-bold">
+                    <span className="text-spotify-green">{e.wins}W</span>
+                    <span className="text-red-400">{e.losses}L</span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── BEST HOURS + PAIR PERFORMANCE ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Best Hours */}
+        {hourStats.length > 0 && (
+          <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+            <div className="mb-6">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Best Hours to Trade</h3>
+              <p className="text-xs text-white/30 mt-1">Based on your actual closed trade results</p>
+            </div>
+            <div className="space-y-3">
+              {hourStats.slice(0, 6).map((h, i) => {
+                const label  = `${String(h.hour).padStart(2, '0')}:00 – ${String(h.hour + 1).padStart(2, '0')}:00`;
+                const isTop  = i === 0;
+                const maxAbs = Math.max(...hourStats.map(x => Math.abs(x.pnl)), 1);
+                const barPct = Math.abs(h.pnl) / maxAbs * 100;
+                return (
+                  <div key={h.hour} className={`flex items-center gap-4 p-3 rounded-xl border transition-all ${isTop ? 'bg-spotify-green/5 border-spotify-green/20' : 'bg-white/[0.02] border-white/5'}`}>
+                    <div className="w-6 text-center">
+                      {isTop ? <span className="text-sm">⭐</span> : <span className="text-[9px] font-black text-white/20">#{i + 1}</span>}
+                    </div>
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <div className="flex justify-between items-center">
+                        <span className={`text-xs font-black font-mono ${isTop ? 'text-spotify-green' : 'text-white'}`}>{label}</span>
+                        <span className={`text-xs font-black ${h.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                          {h.pnl >= 0 ? '+' : ''}{toDisp(h.pnl)}
+                        </span>
+                      </div>
+                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${h.pnl >= 0 ? 'bg-spotify-green' : 'bg-red-500'}`} style={{ width: `${barPct}%` }} />
+                      </div>
+                      <p className="text-[9px] text-spotify-muted">{h.wr}% WR · {h.count} trades</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Pair Performance */}
+        {pairStats.length > 0 && (
+          <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+            <div className="mb-6">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Pair Performance</h3>
+              <p className="text-xs text-white/30 mt-1">Which instrument actually makes you money</p>
+            </div>
+            <div className="space-y-3">
+              {pairStats.slice(0, 6).map((p, i) => {
+                const isTop  = i === 0;
+                const maxAbs = Math.max(...pairStats.map(x => Math.abs(x.pnl)), 1);
+                const barPct = Math.abs(p.pnl) / maxAbs * 100;
+                return (
+                  <div key={p.pair} className={`flex items-center gap-4 p-3 rounded-xl border ${isTop ? 'bg-spotify-green/5 border-spotify-green/20' : 'bg-white/[0.02] border-white/5'}`}>
+                    <div className="w-6 text-center">
+                      {isTop ? <span className="text-sm">🏆</span> : <span className="text-[9px] font-black text-white/20">#{i + 1}</span>}
+                    </div>
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <div className="flex justify-between items-center">
+                        <span className={`text-xs font-black ${isTop ? 'text-spotify-green' : 'text-white'}`}>{p.pair}</span>
+                        <span className={`text-xs font-black ${p.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                          {p.pnl >= 0 ? '+' : ''}{toDisp(p.pnl)}
+                        </span>
+                      </div>
+                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${p.pnl >= 0 ? 'bg-spotify-green' : 'bg-red-500'}`} style={{ width: `${barPct}%` }} />
+                      </div>
+                      <p className="text-[9px] text-spotify-muted">{p.wr}% WR · {p.count} trades</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── SETUP PERFORMANCE ── */}
+      {setupStats.length > 0 && (
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+          <div className="mb-6">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Setup Profitability Ranking</h3>
+            <p className="text-xs text-white/30 mt-1">Which setups are actually worth taking</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {setupStats.slice(0, 6).map((s, i) => {
+              const isTop = i === 0;
+              return (
+                <div key={s.setup} className={`flex items-center gap-4 p-4 rounded-2xl border ${isTop ? 'bg-spotify-green/5 border-spotify-green/20' : 'bg-black/20 border-white/5'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${isTop ? 'bg-spotify-green text-black' : 'bg-white/10 text-white/40'}`}>
+                    {i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-black truncate ${isTop ? 'text-white' : 'text-white/70'}`}>{s.setup}</p>
+                    <p className="text-[9px] text-spotify-muted">{s.count} trades · {s.wr}% WR</p>
+                  </div>
+                  <span className={`text-sm font-black font-mono shrink-0 ${s.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                    {s.pnl >= 0 ? '+' : ''}{toDisp(s.pnl)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── KEY RISK METRICS ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Avg Win', value: toDisp(avgWin), color: 'text-spotify-green', icon: '📈' },
+          { label: 'Avg Loss', value: toDisp(avgLoss), color: 'text-red-400', icon: '📉' },
+          { label: 'Exp. Value/Trade', value: toDisp(expectedValue), color: expectedValue >= 0 ? 'text-spotify-green' : 'text-red-400', icon: '⚡' },
+          { label: 'Max Drawdown', value: toDisp(maxDD), color: 'text-yellow-400', icon: '🔻' },
+        ].map(m => (
+          <div key={m.label} className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 text-center">
+            <p className="text-xl mb-2">{m.icon}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-2">{m.label}</p>
+            <p className={`text-xl font-black ${m.color}`}>{m.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── ARCHETYPE PROGRESSION LADDER ── */}
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Archetype Progression</h3>
+            <p className="text-xs text-white/30 mt-1">9 levels from gambler to system architect</p>
+          </div>
+          <div className={`text-[9px] font-black px-3 py-1.5 rounded-full border ${archetype.borderColor} ${archetype.bgColor} ${archetype.color} uppercase tracking-widest`}>
+            {archetype.scoreRange}
+          </div>
+        </div>
+
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-5 top-5 bottom-5 w-px bg-white/5" />
+          <motion.div
+            className="absolute left-5 top-5 w-px bg-gradient-to-b from-spotify-green to-transparent"
+            initial={{ height: 0 }}
+            animate={{ height: `${(currentLevelId / 8) * 100}%` }}
+            transition={{ duration: 1.2, ease: 'easeOut' }}
+          />
+
+          <div className="space-y-2">
+            {ARCHETYPES_LIST.map(stage => {
+              const isActive = currentLevelId === stage.id;
+              const isPast   = currentLevelId > stage.id;
+              const isFuture = currentLevelId < stage.id;
+              return (
+                <motion.div
+                  key={stage.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: stage.id * 0.05 }}
+                  className={`relative flex items-center gap-4 p-3 rounded-2xl transition-all ${isActive ? 'bg-white/[0.05] border border-white/10' : ''}`}
+                >
+                  {/* Node */}
+                  <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                    isActive ? 'bg-white scale-110 shadow-[0_0_24px_rgba(255,255,255,0.2)]' :
+                    isPast   ? 'bg-spotify-green/20' : 'bg-white/5'
+                  }`}>
+                    {isPast
+                      ? <span className="text-spotify-green text-sm font-black">✓</span>
+                      : <span className={isActive ? 'text-base' : 'text-sm opacity-50'}>{stage.icon}</span>
+                    }
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-black transition-colors ${isActive ? 'text-white' : isPast ? 'text-white/30' : 'text-white/15'}`}>
+                        {stage.name}
+                      </span>
+                      {isActive && (
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border ${archetype.borderColor} ${archetype.bgColor} ${archetype.color}`}>
+                          You are here
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-[10px] font-bold ${isActive ? 'text-spotify-muted' : 'text-white/10'}`}>{stage.sub}</p>
+                  </div>
+
+                  <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 ${
+                    isActive ? stage.color : isPast ? 'text-spotify-green/30' : 'text-white/8'
+                  }`}>
+                    Lvl {stage.id}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Next level callout */}
+        <div className={`mt-6 p-5 rounded-2xl border ${archetype.borderColor} ${archetype.bgColor}`}>
+          <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-1">Next Level Requirement</p>
+          <p className={`text-sm font-bold ${archetype.color}`}>{archetype.nextLevel}</p>
+        </div>
+      </div>
+
+      {/* ── PATH TO MASTERY + DAILY QUEST ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-spotify-card p-8 rounded-2xl border border-white/5">
-          <h3 className="text-xl font-black text-white tracking-tight mb-6 flex items-center gap-2">
-            <BookOpen size={20} className="text-spotify-green" /> Path to {habitStats.overallScore >= 85 ? 'System Mastery' : 'Next Level'}
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+          <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
+            <BookOpen size={18} className="text-spotify-green" /> Path to Mastery
           </h3>
           <div className="space-y-6">
             {[
-              { 
-                label: 'Discipline', 
-                score: habitStats.adherenceScore, 
-                advice: habitStats.adherenceScore < 80 ? 'You are straying from your rules. Stick to "Plan: Yes" for the next 5 trades.' : 'Exceptional focus. Your rules are your edge.'
-              },
-              { 
-                label: 'Risk Control', 
-                score: habitStats.riskScore, 
-                advice: habitStats.riskScore < 70 ? 'Risk per trade is volatile. Aim for ±10% deviation only.' : 'Rock solid sizing. This prevents emotional sabotage.'
-              },
-              { 
-                label: 'Psychology', 
-                score: Math.min(100, Math.round((habitStats.currentStreak / 10) * 100)), 
-                advice: habitStats.currentStreak < 3 ? 'You are in a "Revenge" or "Frustration" zone. Reset your mind.' : `On a ${habitStats.currentStreak} trade rule-following streak! Keep going.`
-              }
+              { label: 'Discipline', score: adherenceScore, advice: adherenceScore < 80 ? 'Stick to "Plan: Yes" for your next 5 trades.' : 'Exceptional focus. Your rules are your edge.' },
+              { label: 'Risk Control', score: riskScore, advice: riskScore < 70 ? 'Risk per trade is volatile. Aim for ±10% deviation.' : 'Rock solid sizing. This prevents emotional sabotage.' },
+              { label: 'Psychology', score: Math.min(100, Math.round((currentStreak / 10) * 100)), advice: currentStreak < 3 ? 'You may be in a frustration zone. Reset your mind.' : `${currentStreak}-trade rule-following streak. Keep going.` }
             ].map((item, idx) => (
               <div key={idx} className="space-y-2">
                 <div className="flex justify-between items-end">
                   <span className="text-xs font-black uppercase tracking-widest text-spotify-muted">{item.label}</span>
-                  <span className={`text-sm font-black ${item.score > 70 ? 'text-spotify-green' : item.score > 40 ? 'text-yellow-500' : 'text-red-500'}`}>{item.score}%</span>
+                  <span className={`text-sm font-black ${item.score > 70 ? 'text-spotify-green' : item.score > 40 ? 'text-yellow-500' : 'text-red-400'}`}>{item.score}%</span>
                 </div>
-                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className={`h-full transition-all duration-1000 ${item.score > 70 ? 'bg-spotify-green' : item.score > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${item.score}%` }} />
+                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${item.score}%` }} transition={{ duration: 1, delay: idx * 0.1 }}
+                    className={`h-full rounded-full ${item.score > 70 ? 'bg-spotify-green' : item.score > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} />
                 </div>
-                <p className="text-[10px] text-spotify-muted leading-relaxed font-bold italic">{item.advice}</p>
+                <p className="text-[10px] text-spotify-muted leading-relaxed italic">{item.advice}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-spotify-card p-8 rounded-2xl border border-white/5">
-          <h3 className="text-xl font-black text-white tracking-tight mb-6 flex items-center gap-2">
-            <Zap size={20} className="text-spotify-green" /> Daily Habit Objective
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+          <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
+            <Zap size={18} className="text-spotify-green" /> Milestone Tracker
           </h3>
-          <div className="bg-white/5 p-6 rounded-2xl border border-white/5 flex items-start gap-4 mb-4">
-             <div className="p-3 bg-spotify-green/20 rounded-xl">
-               <Target size={24} className="text-spotify-green" />
-             </div>
-             <div>
-               <p className="text-[10px] font-black uppercase text-spotify-green tracking-widest mb-1">Current Quest</p>
-               <h4 className="text-lg font-black text-white tracking-tight">
-                 {habitStats.persona === 'The Novice' ? 'The Protocol Guard' : habitStats.persona === 'The Tactician' ? 'Risk Equalizer' : 'Scaling Efficiency'}
-               </h4>
-               <p className="text-xs text-spotify-muted font-bold mt-1">
-                 {habitStats.persona === 'The Novice' && 'Log 5 trades in a row where "Followed Plan" is marked as YES.'}
-                 {habitStats.persona === 'The Tactician' && 'Maintain a standard deviation of less than 0.2% on your risk size.'}
-                 {habitStats.persona === 'The Specialist' && 'Avoid trading during news sessions for the next 48 hours.'}
-                 {habitStats.persona === 'The Sniper' && 'Identify one "A+" setup per day and ignore everything else.'}
-               </p>
-             </div>
+          <div className="space-y-3 mb-8">
+            {[
+              { label: '90% Rule Adherence',    done: adherenceScore >= 90,   value: `${adherenceScore}%` },
+              { label: '10x Discipline Streak',  done: currentStreak >= 10,    value: `${currentStreak}/10` },
+              { label: 'Zero Revenge Trades',    done: revengeTrades === 0,    value: revengeTrades === 0 ? '✓' : `${revengeTrades} found` },
+              { label: 'Positive Exp. Value',    done: expectedValue > 0,      value: toDisp(expectedValue) },
+              { label: 'Tier 7+ Archetype',      done: currentLevelId >= 7,    value: `Lvl ${currentLevelId}` },
+              { label: 'No Overtrade Days',      done: overtradeDays === 0,    value: overtradeDays === 0 ? '✓' : `${overtradeDays} days` },
+            ].map((m, i) => (
+              <motion.div key={m.label} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
+                className="flex items-center justify-between gap-3 p-3 rounded-xl border border-white/5 bg-black/20">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all ${m.done ? 'bg-spotify-green shadow-[0_0_10px_rgba(29,185,84,0.6)]' : 'bg-white/10'}`} />
+                  <span className={`text-[11px] font-bold ${m.done ? 'text-white' : 'text-spotify-muted'}`}>{m.label}</span>
+                </div>
+                <span className={`text-[10px] font-black font-mono ${m.done ? 'text-spotify-green' : 'text-white/20'}`}>{m.value}</span>
+              </motion.div>
+            ))}
           </div>
-          <p className="text-[10px] text-spotify-muted font-black uppercase tracking-[0.2em] mt-8 mb-4">Milestone Tracker</p>
-          <div className="space-y-3">
-             <div className="flex items-center gap-3 group">
-                <div className={`w-2 h-2 rounded-full ${habitStats.adherenceScore >= 90 ? 'bg-spotify-green shadow-[0_0_10px_rgba(29,185,84,0.5)]' : 'bg-white/10'}`} />
-                <span className={`text-[11px] font-bold ${habitStats.adherenceScore >= 90 ? 'text-white' : 'text-spotify-muted'}`}>90% Rule Adherence</span>
-             </div>
-             <div className="flex items-center gap-3 group">
-                <div className={`w-2 h-2 rounded-full ${habitStats.currentStreak >= 10 ? 'bg-spotify-green shadow-[0_0_10px_rgba(29,185,84,0.5)]' : 'bg-white/10'}`} />
-                <span className={`text-[11px] font-bold ${habitStats.currentStreak >= 10 ? 'text-white' : 'text-spotify-muted'}`}>10x Discipline Streak</span>
-             </div>
-             <div className="flex items-center gap-3 group">
-                <div className={`w-2 h-2 rounded-full ${habitStats.overallScore >= 80 ? 'bg-spotify-green shadow-[0_0_10px_rgba(29,185,84,0.5)]' : 'bg-white/10'}`} />
-                <span className={`text-[11px] font-bold ${habitStats.overallScore >= 80 ? 'text-white' : 'text-spotify-muted'}`}>Tier 4 Archetype Achievement</span>
-             </div>
+
+          {/* Score bars */}
+          <div className="space-y-3 pt-6 border-t border-white/5">
+            {[
+              { label: 'Plan Adherence', score: adherenceScore, color: 'bg-spotify-green' },
+              { label: 'Risk Stability',  score: riskScore,      color: 'bg-blue-400'      },
+              { label: 'Edge Efficiency', score: Math.round(winRate * 100), color: 'bg-purple-400' }
+            ].map(s => (
+              <div key={s.label} className="flex items-center gap-3">
+                <span className="text-[9px] font-black uppercase tracking-widest text-spotify-muted w-28 shrink-0">{s.label}</span>
+                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${s.score}%` }} transition={{ duration: 1 }}
+                    className={`h-full rounded-full ${s.color}`} />
+                </div>
+                <span className="text-[10px] font-black text-white w-8 text-right">{s.score}%</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-spotify-card p-6 rounded-2xl border border-white/5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black uppercase text-spotify-muted tracking-widest">Plan Adherence</h3>
-            <span className="text-xs font-black text-white">{habitStats.adherenceScore}%</span>
-          </div>
-          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${habitStats.adherenceScore}%` }}
-              className="h-full bg-spotify-green"
-            />
-          </div>
-          <p className="text-[10px] text-spotify-muted font-bold leading-relaxed italic">Measure of how often you follow your pre-defined rules.</p>
-        </div>
-
-        <div className="bg-spotify-card p-6 rounded-2xl border border-white/5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black uppercase text-spotify-muted tracking-widest">Risk Stability</h3>
-            <span className="text-xs font-black text-white">{habitStats.riskScore}%</span>
-          </div>
-          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${habitStats.riskScore}%` }}
-              className="h-full bg-white"
-            />
-          </div>
-          <p className="text-[10px] text-spotify-muted font-bold leading-relaxed italic">Measures how consistently you size your positions.</p>
-        </div>
-
-        <div className="bg-spotify-card p-6 rounded-2xl border border-white/5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black uppercase text-spotify-muted tracking-widest">Edge Efficiency</h3>
-            <span className="text-xs font-black text-white">{Math.round(habitStats.winRate * 100)}%</span>
-          </div>
-          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${habitStats.winRate * 100}%` }}
-              className="h-full bg-spotify-green/50"
-            />
-          </div>
-          <p className="text-[10px] text-spotify-muted font-bold leading-relaxed italic">Probability of your strategy resulting in a win.</p>
-        </div>
-      </div>
-
-      <div className="bg-spotify-card rounded-2xl border border-white/5 p-8">
+      {/* ── 12-MONTH PROJECTION ── */}
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h3 className="text-xl font-black text-white tracking-tight">12-Month Equity Projection</h3>
-            <p className="text-xs text-spotify-muted font-bold">Estimated growth if current habits remain unchanged</p>
+            <p className="text-xs text-spotify-muted font-bold">Based on your current expected value per trade</p>
           </div>
-          <div className="md:text-right">
-            <p className="text-[10px] font-black uppercase text-spotify-muted tracking-widest mb-1">Projected End Balance</p>
-            <p className="text-2xl font-black text-spotify-green tracking-tighter">
-              {formatCurrency(convertCurrency(habitStats.projectionData[12].projected, 'USD', displayCurrency), displayCurrency)}
-            </p>
+          <div className="flex gap-6 shrink-0">
+            {[
+              { label: '3M', value: projectionData[3]?.projected },
+              { label: '6M', value: projectionData[6]?.projected },
+              { label: '12M', value: projectionData[12]?.projected },
+            ].map(p => (
+              <div key={p.label} className="text-right">
+                <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted">{p.label}</p>
+                <p className={`text-lg font-black ${(p.value || 0) >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                  {toDisp(p.value || 0)}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
-
-        <div className="h-[300px] w-full">
+        <div className="h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={habitStats.projectionData}>
+            <AreaChart data={projectionData}>
               <defs>
-                <linearGradient id="colorProj" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1DB954" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#1DB954" stopOpacity={0}/>
+                <linearGradient id="projGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#1DB954" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#1DB954" stopOpacity={0}    />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis 
-                dataKey="month" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700 }}
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700 }}
-                tickFormatter={(val) => formatCurrency(convertCurrency(val, 'USD', displayCurrency), displayCurrency)}
-              />
-              <Tooltip 
-                content={({ active, payload }: any) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-black/90 border border-white/10 p-3 rounded-lg backdrop-blur-xl">
-                        <p className="text-[10px] font-black text-spotify-muted uppercase mb-2">{data.month}</p>
-                        <p className="text-sm font-black text-white">
-                          {formatCurrency(convertCurrency(data.projected, 'USD', displayCurrency), displayCurrency)}
-                        </p>
-                        <p className="text-[9px] font-bold text-spotify-green mt-1">ESTIMATED POSITION</p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="projected" 
-                stroke="#1DB954" 
-                strokeWidth={3}
-                fillOpacity={1} 
-                fill="url(#colorProj)" 
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700 }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 9, fontWeight: 700 }}
+                tickFormatter={v => toDisp(v)} />
+              <Tooltip content={({ active, payload }: any) => {
+                if (!active || !payload?.length) return null;
+                return (
+                  <div className="bg-black/90 border border-white/10 p-3 rounded-xl backdrop-blur-xl">
+                    <p className="text-[9px] font-black text-spotify-muted uppercase mb-1">{payload[0].payload.month}</p>
+                    <p className="text-sm font-black text-white">{toDisp(payload[0].value)}</p>
+                  </div>
+                );
+              }} />
+              <Area type="monotone" dataKey="projected" stroke="#1DB954" strokeWidth={2.5} fillOpacity={1} fill="url(#projGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-            <h4 className="text-[10px] font-black uppercase text-spotify-muted tracking-widest mb-2 flex items-center gap-2">
-              <Zap size={12} className="text-spotify-green" /> Probability Filter
-            </h4>
-            <p className="text-xs text-white/70 font-medium leading-relaxed">
-              Based on your expected value per trade. 
-              The system assumes a volume of 20 trades per month maintaining current win rate and RR.
-            </p>
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-black/20 p-4 rounded-2xl border border-white/5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-1">Expected Value / Trade</p>
+            <p className={`text-lg font-black ${expectedValue >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>{toDisp(expectedValue)}</p>
+            <p className="text-[10px] text-spotify-muted mt-1">Based on avg win {toDisp(avgWin)} · avg loss {toDisp(avgLoss)}</p>
           </div>
-          <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-            <h4 className="text-[10px] font-black uppercase text-spotify-muted tracking-widest mb-2 flex items-center gap-2">
-              <TrendingUp size={12} className="text-spotify-green" /> Strategy Feedback
-            </h4>
-            <p className="text-xs text-white/70 font-medium leading-relaxed">
-              Your average RR of <span className="text-white font-black">1:{habitStats.avgRR.toFixed(2)}</span> suggests you should focus on letting winners run longer to accelerate equity growth.
-            </p>
+          <div className="bg-black/20 p-4 rounded-2xl border border-white/5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-1">Avg R:R Ratio</p>
+            <p className="text-lg font-black text-white">1:{avgRR.toFixed(2)}</p>
+            <p className="text-[10px] text-spotify-muted mt-1">Target minimum 1:2 for sustainable growth</p>
           </div>
         </div>
       </div>
+
     </div>
   );
 }
