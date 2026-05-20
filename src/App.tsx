@@ -2041,7 +2041,8 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
   {/* ── KILL ZONE TICKER ── */}
   <KillZoneTicker />
-      
+    </div>
+    </div>
     </div>
     
       {/* Rules Engine Strip */}
