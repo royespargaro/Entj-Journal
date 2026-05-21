@@ -965,7 +965,7 @@ export default function App() {
               transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
               className="absolute inset-0 border-t border-spotify-green/20"
             />
-            <span className="text-xl font-black tracking-tighter text-white opacity-20">ENTJ</span>
+            <img src="/logo-bull.png" alt="ENTJ" className="opacity-10" style={{ height: '28px', width: 'auto' }} />
           </div>
         </motion.div>
 
@@ -1047,7 +1047,10 @@ function LoginPage() {
       
       <div className="w-full max-w-sm z-10 border border-white/10 p-10 bg-[#0f0f0f]/80 backdrop-blur-xl">
         <div className="mb-10 text-center">
-          <h1 className="text-3xl font-extrabold text-white tracking-widest uppercase">ENTJ</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>   
+          <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '30px', width: 'auto' }} />   
+          <img src="/logo-wordmark.png" alt="ENTJ" style={{ height: '20px', width: 'auto', opacity: 0.9 }} /> 
+          </div>
           <div className="h-[2px] w-8 bg-white mx-auto mt-4 mb-2" />
           <p className="text-[9px] text-white/50 uppercase tracking-widest">Trading Journal Interface</p>
         </div>
