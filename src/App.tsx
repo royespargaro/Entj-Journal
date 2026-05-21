@@ -616,8 +616,8 @@ const session = trade.session || '';
     <QRCodeCanvas value="https://entjournalv1.vercel.app" size={36} bgColor="#fff" fgColor="#000" />
   </div>
 </div>
-  );
-};
+ );  
+};    
 
 const ShareModal = ({ trade, onClose, user, displayCurrency }: any) => {
     const [preview, setPreview] = React.useState<string | null>(null);
