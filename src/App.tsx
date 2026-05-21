@@ -323,13 +323,14 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
         </div>
         <div style={{
           fontFamily: "'JetBrains Mono', monospace",
-          fontSize: '9px',
+          fontSize: '10px',
           fontWeight: 500,
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
           padding: '5px 11px',
           borderRadius: '6px',
           marginTop: '2px',
+          textAlign: 'center', 
           color: accent,
           background: accentDim,
           border: `1px solid ${accentBorder}`,
@@ -419,7 +420,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
         {/* Vertical ROI label */}
         <div style={{
           position: 'absolute',
-          left: '22px',
+          left: '8px',
           top: '50%',
           transform: 'translateY(-50%) rotate(-90deg)',
           transformOrigin: 'center center',
@@ -455,6 +456,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
             letterSpacing: '-0.03em',
             color: accent,
             textShadow: `0 0 80px ${accent}55`,
+      marginBottom: '20px',
           }}>
             {roi >= 0 ? '+' : '−'}{Math.abs(roi).toFixed(2)}
             <span style={{ fontSize: '48px', verticalAlign: 'baseline', marginLeft: '2px' }}>%</span>
@@ -467,13 +469,13 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
               color: accent,
               letterSpacing: '0.01em',
             }}>
-              {pnl >= 0 ? '+'}{pnlFormatted}
+              {pnl >= 0 ? '+' + pnlFormatted : pnlFormatted}
             </span>
             <span style={{
               fontFamily: "'Outfit', system-ui, sans-serif",
-              fontSize: '10px',
+              fontSize: '20px',
               fontWeight: 300,
-              color: '#555',
+              color: '#333',
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
             }}>
