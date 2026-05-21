@@ -563,6 +563,12 @@ const session = trade.session || '';
         background: 'rgba(0,0,0,0.3)',
       }}>
         <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+  <img 
+    src="/logo-bull.png" 
+    alt="ENTJournal" 
+    style={{ height: '22px', width: 'auto', opacity: 0.8 }} 
+  />
           <div style={{
             fontFamily: "'DM Serif Display', Georgia, serif",
             fontStyle: 'italic',
@@ -574,6 +580,7 @@ const session = trade.session || '';
           }}>
             ENTJournal
           </div>
+            </div>
           <div style={{
             fontFamily: "'Outfit', system-ui, sans-serif",
             fontSize: '8px',
