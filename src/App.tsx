@@ -1045,15 +1045,15 @@ function LoginPage() {
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,#1a1a1a_0%,#0a0a0a_70%)] pointer-events-none" />
       
-      <div className="w-full max-w-sm z-10 border border-white/10 p-10 bg-[#0f0f0f]/80 backdrop-blur-xl">
-        <div className="mb-10 text-center">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>   
-          <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '30px', width: 'auto' }} />   
-          <img src="/logo-wordmark.png" alt="ENTJ" style={{ height: '20px', width: 'auto', opacity: 0.9 }} /> 
-          </div>
-          <div className="h-[2px] w-8 bg-white mx-auto mt-4 mb-2" />
-          <p className="text-[9px] text-white/50 uppercase tracking-widest">Trading Journal Interface</p>
-        </div>
+     <div className="w-full max-w-sm z-10 border border-white/10 p-10 bg-[#0f0f0f]/80 backdrop-blur-xl">
+  <div className="mb-10 text-center">
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>   
+  <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '60px', width: 'auto' }} />     
+      <img src="/logo-wordmark.png" alt="ENTJ" style={{ height: '20px', width: 'auto', opacity: 0.9 }} /> 
+    </div>
+    <div className="h-[2px] w-8 bg-white mx-auto mt-4 mb-2" />
+    <p className="text-[9px] text-white/50 uppercase tracking-widest">Trading Journal Interface</p>
+  </div>
 
         <div className="space-y-4">
           <button 
