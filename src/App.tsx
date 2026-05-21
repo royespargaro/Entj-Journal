@@ -562,33 +562,34 @@ const session = trade.session || '';
         padding: '16px 24px',
         background: 'rgba(0,0,0,0.3)',
       }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-  <img 
-    src="/logo-bull.png" 
-    style={{ height: '100px', width: 'auto', opacity: 0.8 }} 
-  />
-          <div style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontStyle: 'italic',
-            fontWeight: 300,
-            fontSize: '20px',
-            color: accent,
-            letterSpacing: '-0.01em',
-            lineHeight: 1,
-          }}>
-            Track · Reflect · Improve
-          </div>
-          <div style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '8px',
-            color: '#333',
-            letterSpacing: '0.08em',
-            marginTop: '3px',
-          }}>
-            entjournalv1.vercel.app
-          </div>
-        </div>
+      <div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+    <img 
+      src="/logo-bull.png" 
+      style={{ height: '100px', width: 'auto', opacity: 0.8 }} 
+    />
+  </div>
+  <div style={{
+    fontFamily: "'Outfit', system-ui, sans-serif",
+    fontSize: '8px',
+    fontWeight: 300,
+    color: '#444',
+    letterSpacing: '0.22em',
+    textTransform: 'uppercase',
+    marginTop: '4px',
+  }}>
+    Track · Reflect · Improve
+  </div>
+  <div style={{
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: '8px',
+    color: '#333',
+    letterSpacing: '0.08em',
+    marginTop: '3px',
+  }}>
+    entjournalv1.vercel.app
+  </div>
+</div>
         <div style={{
           background: '#fff',
           borderRadius: '8px',
