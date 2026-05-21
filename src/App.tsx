@@ -328,7 +328,7 @@ const session = trade.session || '';
           letterSpacing: '0.18em',
           textTransform: 'uppercase',
           marginTop: '2px', 
-          color: badgeColor,
+          color: accent,
         }}>
           {direction === 'Long' ? 'LONG' : 'SHORT'}
         </div>
