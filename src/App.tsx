@@ -414,7 +414,7 @@ const session = trade.session || '';
         {/* Vertical ROI label */}
         <div style={{
           position: 'absolute',
-          left: '4px',
+          left: '3px',
           top: '50%',
           transform: 'translateY(-50%) rotate(-90deg)',
           transformOrigin: 'center center',
@@ -469,7 +469,7 @@ const session = trade.session || '';
               fontFamily: "'Outfit', system-ui, sans-serif",
               fontSize: '15px',
               fontWeight: 300,
-              color: '#334',
+              color: 'accent',
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
             }}>
