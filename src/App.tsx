@@ -249,7 +249,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
     ? 'Bitcoin / US Dollar'
     : (trade.pair || trade.symbol) || '';
 
-  const direction = trade.dir || trade.direction || 'Long';
+  const direction = trade.dir || trade.direction ||'Long';
   const session = trade.session || '';
 
   // Metallic shape styles
@@ -443,7 +443,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
           flexDirection: 'column',
           alignItems: 'flex-end',
           justifyContent: 'center',
-          paddingRight: '28px',
+          paddingRight: '30px',
           zIndex: 10,
         }}>
           <div style={{
@@ -467,7 +467,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
               color: accent,
               letterSpacing: '0.01em',
             }}>
-              {pnl >= 0 ? '+' : '−'}{pnlFormatted}
+              {pnl >= 0 ? '+'}{pnlFormatted}
             </span>
             <span style={{
               fontFamily: "'Outfit', system-ui, sans-serif",
