@@ -555,55 +555,67 @@ const session = trade.session || '';
       </div>
 
       {/* ── FOOTER ── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 24px',
-        background: 'rgba(0,0,0,0.3)',
-      }}>
-      <div>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-    <img 
-      src="/logo-bull.png" 
-      style={{ height: '100px', width: 'auto', opacity: 0.8 }} 
-    />
+<div style={{
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '16px 24px',
+  background: 'rgba(0,0,0,0.3)',
+  position: 'relative',
+  overflow: 'hidden',
+}}>
+  {/* Bull watermark — absolute, doesn't affect layout */}
+  <img 
+    src="/logo-bull.png" 
+    style={{ 
+      position: 'absolute',
+      bottom: '-10px',
+      left: '-10px',
+      height: '100px', 
+      width: 'auto', 
+      opacity: 0.12,
+      pointerEvents: 'none',
+    }} 
+  />
+  
+  <div style={{ position: 'relative', zIndex: 1 }}>
+    <div style={{
+      fontFamily: "'Outfit', system-ui, sans-serif",
+      fontSize: '8px',
+      fontWeight: 300,
+      color: '#444',
+      letterSpacing: '0.22em',
+      textTransform: 'uppercase',
+      marginTop: '4px',
+    }}>
+      Track · Reflect · Improve
+    </div>
+    <div style={{
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: '8px',
+      color: '#333',
+      letterSpacing: '0.08em',
+      marginTop: '3px',
+    }}>
+      entjournalv1.vercel.app
+    </div>
   </div>
+
   <div style={{
-    fontFamily: "'Outfit', system-ui, sans-serif",
-    fontSize: '8px',
-    fontWeight: 300,
-    color: '#444',
-    letterSpacing: '0.22em',
-    textTransform: 'uppercase',
-    marginTop: '4px',
+    background: '#fff',
+    borderRadius: '8px',
+    padding: '4px',
+    width: '44px',
+    height: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    zIndex: 1,
   }}>
-    Track · Reflect · Improve
-  </div>
-  <div style={{
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '8px',
-    color: '#333',
-    letterSpacing: '0.08em',
-    marginTop: '3px',
-  }}>
-    entjournalv1.vercel.app
+    <QRCodeCanvas value="https://entjournalv1.vercel.app" size={36} bgColor="#fff" fgColor="#000" />
   </div>
 </div>
-        <div style={{
-          background: '#fff',
-          borderRadius: '8px',
-          padding: '4px',
-          width: '44px',
-          height: '44px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <QRCodeCanvas value="https://entjournalv1.vercel.app" size={36} bgColor="#fff" fgColor="#000" />
-        </div>
-      </div>
-    </div>
   );
 };
 
@@ -953,7 +965,7 @@ export default function App() {
               transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
               className="absolute inset-0 border-t border-spotify-green/20"
             />
-            <img src="/logo-bull.png" alt="ENTJ" className="opacity-10" style={{ height: '28px', width: 'auto' }} />
+            <img src="/logo-bull.png" alt="ENTJ" className="opacity-10" style={{ height: '100px', width: 'auto' }} />
           </div>
         </motion.div>
 
