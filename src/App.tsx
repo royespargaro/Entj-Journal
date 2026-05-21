@@ -325,9 +325,9 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: '10px',
           fontWeight: 500,
-          letterSpacing: '0.18em',
+          letterSpacing: '0.1em',
           textTransform: 'uppercase',
-          padding: '5px 11px',
+          padding: '4px 10px',
           borderRadius: '6px',
           marginTop: '2px',
           textAlign: 'center', 
@@ -420,7 +420,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
         {/* Vertical ROI label */}
         <div style={{
           position: 'absolute',
-          left: '8px',
+          left: '4px',
           top: '50%',
           transform: 'translateY(-50%) rotate(-90deg)',
           transformOrigin: 'center center',
@@ -473,9 +473,9 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
             </span>
             <span style={{
               fontFamily: "'Outfit', system-ui, sans-serif",
-              fontSize: '20px',
+              fontSize: '15px',
               fontWeight: 300,
-              color: '#333',
+              color: '#334',
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
             }}>
