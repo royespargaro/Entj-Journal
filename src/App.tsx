@@ -225,7 +225,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User | null, displayCurrency: string }) => {
-  const isWin = trade.pnl > 0;
+  const isWin = trade.result === 'WIN';
   const pnl = cleanMoney(trade.pnl);
   const pnlFormatted = formatCurrency(convertCurrency(pnl, trade.currency || 'USD', displayCurrency), displayCurrency);
   const accent = isWin ? '#00C853' : '#ff4466';
