@@ -224,398 +224,240 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
-
 const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User | null, displayCurrency: string }) => {
   const isWin = trade.result === 'WIN';
   const pnl = cleanMoney(trade.pnl);
   const pnlFormatted = formatCurrency(convertCurrency(pnl, trade.currency || 'USD', displayCurrency), displayCurrency);
-  const accent = isWin ? '#00C853' : '#ff4466';
-  const accentDim = isWin ? 'rgba(0,200,83,0.12)' : 'rgba(255,68,102,0.12)';
-  const accentBorder = isWin ? 'rgba(0,200,83,0.22)' : 'rgba(255,68,102,0.22)';
-  const accentGlow = isWin ? 'rgba(0,200,83,0.08)' : 'rgba(255,68,102,0.08)';
-  const chartColor = isWin ? '#00C853' : '#ff4466';
-
+  const accent = isWin ? '#00C853' : '#ff6b6b';
+  
   const entryPrice = parseFloat(trade.entry.toString());
   const exitPrice = parseFloat(trade.exit.toString());
   let roi = 0;
-  if (entryPrice !== 0) {
-    roi = (trade.dir === 'Long' || trade.direction === 'Long')
-      ? ((exitPrice - entryPrice) / entryPrice * 100)
-      : ((entryPrice - exitPrice) / entryPrice * 100);
+  if(entryPrice !== 0) {
+      roi = trade.dir === 'Long' ? ((exitPrice - entryPrice) / entryPrice * 100) : ((entryPrice - exitPrice) / entryPrice * 100);
   }
-
-  const symbolDesc = (trade.pair || trade.symbol) === 'XAUUSD'
-    ? 'Gold / US Dollar'
-    : (trade.pair || trade.symbol) === 'BTCUSD'
-    ? 'Bitcoin / US Dollar'
-    : (trade.pair || trade.symbol) || '';
-
-  const direction = trade.dir || trade.direction || 'Long';
-  const session = trade.session || '';
-
-  // Metallic shape styles
-  const metallicBase: React.CSSProperties = { position: 'absolute', pointerEvents: 'none' };
 
   return (
     <div
       id="share-card"
       style={{
-        width: '360px',
-        borderRadius: '28px',
+        width: '300px',
+        borderRadius: '20px',
         overflow: 'hidden',
         position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#060606',
-        border: `1px solid ${accentBorder}`,
-        boxShadow: `0 0 0 1px rgba(255,255,255,0.02), 0 32px 80px rgba(0,0,0,0.9), 0 0 60px ${accentGlow}`,
-        fontFamily: "'Outfit', system-ui, sans-serif",
+        fontFamily: 'system-ui, sans-serif',
+        background: '#0a0a0a',
+        border: isWin ? '1px solid rgba(0,200,83,0.25)' : '1px solid rgba(255,60,60,0.25)'
       }}
     >
-      {/* Top shimmer line */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: '1px',
-        background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
-        zIndex: 10,
-      }} />
-
-      {/* ── HEADER ── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        padding: '28px 28px 0',
-        position: 'relative',
-        zIndex: 2,
-      }}>
-        <div>
-          <div style={{
-            fontFamily: "'Outfit', system-ui, sans-serif",
-            fontSize: '10px',
-            fontWeight: 500,
-            letterSpacing: '0.26em',
-            color: '#5a5a5a',
-            textTransform: 'uppercase',
-            marginBottom: '6px',
-          }}>
+      {/* Orbs */}
+      <div style={{ position: 'absolute', width: '280px', height: '280px', borderRadius: '50%', top: '-100px', right: '-80px', background: isWin ? 'radial-gradient(circle, rgba(0,200,83,0.13) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(255,60,60,0.11) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', width: '150px', height: '150px', borderRadius: '50%', bottom: '80px', left: '-40px', background: isWin ? 'radial-gradient(circle, rgba(0,200,83,0.07) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(255,60,60,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      
+      {/* Header */}
+      <div style={{ padding: '16px 18px 0px', position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
             {user?.displayName || 'Trader'}
-          </div>
-          <div style={{
-            fontFamily: "'Outfit', system-ui, sans-serif",
-            fontSize: '22px',
-            fontWeight: 700,
-            letterSpacing: '0.06em',
-            color: '#e8e8e8',
-            textTransform: 'uppercase',
-            lineHeight: 1,
-          }}>
-            {trade.pair || trade.symbol}
-          </div>
-          <div style={{
-            fontFamily: "'Outfit', system-ui, sans-serif",
-            fontSize: '11px',
-            fontWeight: 300,
-            color: '#555',
-            letterSpacing: '0.04em',
-            marginTop: '4px',
-          }}>
-            {symbolDesc}{session ? ` · ${session} Session` : ''}
-          </div>
         </div>
-        <div style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: '9px',
-          fontWeight: 500,
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          padding: '5px 11px',
-          borderRadius: '6px',
-          marginTop: '2px',
-          color: accent,
-          background: accentDim,
-          border: `1px solid ${accentBorder}`,
-          flexShrink: 0,
-        }}>
-          {direction === 'Long' ? 'LONG' : 'SHORT'}
+        <div style={{ color: accent, fontSize: '11px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', opacity: 0.8 }}>
+          {trade.dir === 'Long' ? 'Long Position' : 'Short Position'}
+        </div>
+      </div>
+      
+      {/* Instrument */}
+      <div style={{ padding: '0 18px', position: 'relative', zIndex: 2 }}>
+        <div style={{ fontSize: '22px', fontWeight: 700, color: '#fff', letterSpacing: '0.5px', marginBottom: '2px' }}>{trade.pair}</div>
+        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginBottom: '14px' }}>{trade.pair === 'XAUUSD' ? 'Gold / US Dollar' : trade.pair === 'BTCUSD' ? 'Bitcoin / US Dollar' : trade.pair} · {trade.session} Session</div>
+        
+        {/* ROI Section */}
+        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.5px', marginBottom: '1px' }}>ROI</div>
+        <div style={{ fontSize: '58px', fontWeight: 700, letterSpacing: '-2px', lineHeight: 1, marginBottom: '6px', color: isWin ? '#00C853' : '#ff6b6b' }}>{roi >= 0 ? '+' : ''}{roi.toFixed(2)}%</div>
+        <div style={{ fontSize: '18px', fontWeight: 500, marginBottom: '16px', color: isWin ? 'rgba(0,200,83,0.8)' : 'rgba(255,107,107,0.8)' }}>{trade.pnl >= 0 ? '+' : ''}{pnlFormatted} {isWin ? 'profit' : 'loss'}</div>
+        
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '3px' }}>Entry</div>
+                <div style={{ fontSize: '15px', fontWeight: 500, color: '#fff' }}>{trade.entry}</div>
+            </div>
+            <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '3px' }}>Exit</div>
+                <div style={{ fontSize: '15px', fontWeight: 500, color: '#fff' }}>{trade.exit}</div>
+            </div>
         </div>
       </div>
 
-      {/* ── METALLIC ART + ROI ZONE ── */}
-      <div style={{ position: 'relative', height: '220px', marginTop: '12px', overflow: 'hidden' }}>
-
-        {/* Metallic shapes */}
-        <div style={{ ...metallicBase, inset: 0 }}>
-          {/* Outer crescent */}
-          <div style={{
-            ...metallicBase,
-            top: '-10%', left: '-10%', right: '-10%', bottom: '-10%',
-            borderRadius: '50%',
-            background: 'conic-gradient(from 190deg, transparent 0deg, #808080 35deg, #dfdfdf 72deg, #ffffff 92deg, #bbbbbb 122deg, #585858 152deg, #262626 180deg, transparent 205deg)',
-            WebkitMask: 'radial-gradient(ellipse, transparent 50%, black 58%, black 74%, transparent 82%)',
-            filter: 'blur(0.5px)',
-            transform: 'rotate(-28deg) scaleX(1.15) scaleY(0.82)',
-            opacity: 0.38,
-          }} />
-          {/* Inner crescent */}
-          <div style={{
-            ...metallicBase,
-            top: '10%', left: '10%', right: '10%', bottom: '10%',
-            borderRadius: '50%',
-            background: 'conic-gradient(from 150deg, transparent 0deg, #666 28deg, #ccc 60deg, #fff 80deg, #aaa 108deg, #444 136deg, transparent 162deg)',
-            WebkitMask: 'radial-gradient(ellipse, transparent 45%, black 53%, black 66%, transparent 74%)',
-            filter: 'blur(0.5px)',
-            transform: 'rotate(18deg) scaleX(0.9) scaleY(1.1)',
-            opacity: 0.35,
-          }} />
-          {/* Diagonal shard */}
-          <div style={{
-            ...metallicBase,
-            top: '28%', left: '38%', right: '-18%', bottom: '42%',
-            borderRadius: '4% 96% 6% 94% / 92% 4% 96% 8%',
-            background: 'linear-gradient(128deg, #ffffff 0%, #cccccc 18%, #777 44%, #2a2a2a 72%, #080808 100%)',
-            filter: 'blur(0.8px)',
-            transform: 'rotate(-38deg) scaleX(1.5)',
-            opacity: 0.42,
-          }} />
-          {/* Shard specular */}
-          <div style={{
-            ...metallicBase,
-            top: '28%', left: '38%', right: '-18%', bottom: '42%',
-            borderRadius: '4% 96% 6% 94% / 92% 4% 96% 8%',
-            background: 'linear-gradient(128deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 22%, transparent 42%)',
-            filter: 'blur(1px)',
-            transform: 'rotate(-38deg) scaleX(1.5)',
-            opacity: 0.52,
-          }} />
-          {/* Tongue */}
-          <div style={{
-            ...metallicBase,
-            top: '44%', left: '44%', right: '-8%', bottom: '-8%',
-            borderRadius: '78% 22% 28% 72% / 18% 82% 18% 82%',
-            background: 'radial-gradient(ellipse at 32% 32%, #d0d0d0 0%, #888 28%, #404040 58%, #101010 86%, transparent 100%)',
-            filter: 'blur(1px)',
-            transform: 'rotate(22deg)',
-            opacity: 0.52,
-          }} />
-          {/* Tongue specular */}
-          <div style={{
-            ...metallicBase,
-            top: '44%', left: '44%', right: '-8%', bottom: '-8%',
-            borderRadius: '78% 22% 28% 72% / 18% 82% 18% 82%',
-            background: 'radial-gradient(ellipse at 26% 26%, rgba(255,255,255,0.85) 0%, transparent 42%)',
-            filter: 'blur(1.5px)',
-            transform: 'rotate(22deg)',
-            opacity: 0.38,
-          }} />
-          {/* Color tint overlay */}
-          <div style={{
-            ...metallicBase,
-            inset: 0,
-            background: isWin
-              ? 'radial-gradient(ellipse at 60% 50%, rgba(0,200,83,0.18) 0%, transparent 65%)'
-              : 'radial-gradient(ellipse at 60% 50%, rgba(255,68,102,0.18) 0%, transparent 65%)',
-          }} />
-        </div>
-
-        {/* Vertical ROI label */}
-        <div style={{
-          position: 'absolute',
-          left: '22px',
-          top: '50%',
-          transform: 'translateY(-50%) rotate(-90deg)',
-          transformOrigin: 'center center',
-          fontFamily: "'Outfit', system-ui, sans-serif",
-          fontSize: '8px',
-          fontWeight: 400,
-          letterSpacing: '0.36em',
-          color: '#333',
-          textTransform: 'uppercase',
-          whiteSpace: 'nowrap',
-          zIndex: 10,
-        }}>
-          Return on Investment
-        </div>
-
-        {/* ROI number — right anchored */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          justifyContent: 'center',
-          paddingRight: '28px',
-          zIndex: 10,
-        }}>
-          <div style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontStyle: 'italic',
-            fontWeight: 300,
-            fontSize: '88px',
-            lineHeight: 0.9,
-            letterSpacing: '-0.03em',
-            color: accent,
-            textShadow: `0 0 80px ${accent}55`,
-          }}>
-            {roi >= 0 ? '+' : '−'}{Math.abs(roi).toFixed(2)}
-            <span style={{ fontSize: '48px', verticalAlign: 'baseline', marginLeft: '2px' }}>%</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '10px' }}>
-            <span style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '17px',
-              fontWeight: 500,
-              color: accent,
-              letterSpacing: '0.01em',
-            }}>
-              {pnl >= 0 ? '+' : '−'}{pnlFormatted}
-            </span>
-            <span style={{
-              fontFamily: "'Outfit', system-ui, sans-serif",
-              fontSize: '10px',
-              fontWeight: 300,
-              color: '#555',
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-            }}>
-              {isWin ? 'profit' : 'loss'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CHART ── */}
-      <div style={{ position: 'relative', height: '80px' }}>
-        {/* Fade edges */}
-        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '48px', background: 'linear-gradient(90deg, #060606, transparent)', zIndex: 2, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '48px', background: 'linear-gradient(270deg, #060606, transparent)', zIndex: 2, pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '32px', background: 'linear-gradient(to top, #060606, transparent)', zIndex: 2, pointerEvents: 'none' }} />
-        <svg width="360" height="80" viewBox="0 0 360 80" style={{ position: 'absolute', top: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={`cg-${isWin ? 'w' : 'l'}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={chartColor} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <polygon
-            fill={`url(#cg-${isWin ? 'w' : 'l'})`}
-            points={isWin
-              ? "0,70 30,68 60,60 90,63 130,50 170,36 210,22 260,10 360,2 360,80 0,80"
-              : "0,8 30,10 60,18 90,14 130,30 170,46 210,60 260,70 360,78 360,80 0,80"}
-          />
-          <polyline
-            fill="none"
-            stroke={chartColor}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={isWin
-              ? "0,70 30,68 60,60 90,63 130,50 170,36 210,22 260,10 360,2"
-              : "0,8 30,10 60,18 90,14 130,30 170,46 210,60 260,70 360,78"}
-          />
-          <circle cx="360" cy={isWin ? 2 : 78} r="3.5" fill={chartColor} />
-          <circle cx="360" cy={isWin ? 2 : 78} r="9" fill={chartColor} fillOpacity="0.2" />
-          <circle cx="360" cy={isWin ? 2 : 78} r="18" fill={chartColor} fillOpacity="0.07" />
+      {/* Chart Section */}
+      <div style={{ position: 'relative', height: '160px', overflow: 'hidden', margin: '0', display: 'block' }}>
+        <svg width="300" height="160" viewBox="0 0 300 160">
+            <defs>
+                <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={accent} stopOpacity="0.12" />
+                    <stop offset="100%" stopColor={accent} stopOpacity="0" />
+                </linearGradient>
+            </defs>
+            <polyline
+                fill="none"
+                stroke={accent}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                points={isWin ? "0,140 40,130 80,110 120,115 160,85 200,60 240,35 300,10" : "0,20 40,28 80,45 120,40 160,65 200,90 240,115 300,145"}
+            />
+             <polygon
+                fill="url(#glow)"
+                points={isWin ? "0,140 40,130 80,110 120,115 160,85 200,60 240,35 300,10 300,160 0,160" : "0,20 40,28 80,45 120,40 160,65 200,90 240,115 300,145 300,160 0,160"}
+            />
+            {/* Glow circles at end */}
+            <circle cx="300" cy={isWin ? 10 : 145} r="4" fill={accent} />
+            <circle cx="300" cy={isWin ? 10 : 145} r="10" fill={accent} fillOpacity="0.2" />
+            <circle cx="300" cy={isWin ? 10 : 145} r="18" fill={accent} fillOpacity="0.1" />
+        </svg>
+        
+        {/* Rocket SVG */}
+        <svg width="90" height="100" viewBox="0 0 90 100" fill="none" style={{ position: 'absolute', bottom: '16px', right: '20px', zIndex: 3, transform: isWin ? 'none' : 'rotate(180deg) scaleX(-1)', display: 'block' }}>
+            <ellipse cx="45" cy="88" rx="20" ry="8" fill={isWin ? "rgba(0,200,83,0.15)" : "rgba(255,60,60,0.15)"}/>
+            <path d="M45 10 C35 10 28 20 28 35 L28 70 C28 75 32 78 45 80 C58 78 62 75 62 70 L62 35 C62 20 55 10 45 10Z" fill={isWin ? "#1a1a1a" : "#1a0d0d"} stroke={isWin ? "rgba(0,200,83,0.4)" : "rgba(255,60,60,0.4)"} strokeWidth="1"/>
+            <path d="M38 35 C38 25 42 18 45 16 C48 18 52 25 52 35 L52 55 L38 55Z" fill={isWin ? "rgba(0,200,83,0.2)" : "rgba(255,60,60,0.2)"}/>
+            <ellipse cx="45" cy="33" rx="6" ry="8" fill={isWin ? "rgba(0,200,83,0.15)" : "rgba(255,60,60,0.15)"} stroke={isWin ? "rgba(0,200,83,0.4)" : "rgba(255,60,60,0.4)"} strokeWidth="0.8"/>
+            <path d="M35 68 L28 80 L32 78 L30 90 L38 74 L34 76Z" fill={isWin ? "#00C853" : "#ff6b6b"} opacity="0.9"/>
+            <path d="M55 68 L62 80 L58 78 L60 90 L52 74 L56 76Z" fill={isWin ? "#00C853" : "#ff6b6b"} opacity="0.9"/>
+            <path d="M42 75 L40 92 L45 88 L50 92 L48 75Z" fill={isWin ? "#00C853" : "#ff6b6b"} opacity="0.7"/>
+            <path d="M34 40 L20 45 L26 50 L34 52Z" fill={isWin ? "#1a1a1a" : "#1a0d0d"} stroke={isWin ? "rgba(0,200,83,0.3)" : "rgba(255,60,60,0.3)"} strokeWidth="0.8"/>
+            <path d="M56 40 L70 45 L64 50 L56 52Z" fill={isWin ? "#1a1a1a" : "#1a0d0d"} stroke={isWin ? "rgba(0,200,83,0.3)" : "rgba(255,60,60,0.3)"} strokeWidth="0.8"/>
+            <ellipse cx="45" cy="35" rx="3" ry="3.5" fill={isWin ? "rgba(0,200,83,0.5)" : "rgba(255,60,60,0.5)"}/>
+            <path d="M10 55 L6 48 L14 50Z" fill={isWin ? "rgba(0,200,83,0.6)" : "rgba(255,60,60,0.6)"}/>
+            <path d="M20 35 L15 28 L23 31Z" fill={isWin ? "rgba(0,200,83,0.4)" : "rgba(255,60,60,0.4)"}/>
+            <path d="M80 55 L84 48 L76 50Z" fill={isWin ? "rgba(0,200,83,0.6)" : "rgba(255,60,60,0.6)"}/>
+            <path d="M70 35 L75 28 L67 31Z" fill={isWin ? "rgba(0,200,83,0.4)" : "rgba(255,60,60,0.4)"}/>
         </svg>
       </div>
 
-      {/* ── DATA ROW ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1px 1fr 1px 1fr',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
-      }}>
-        {[
-          { label: 'Entry', value: String(trade.entry) },
-          { label: 'Exit', value: String(trade.exit) },
-          { label: 'Net P&L', value: `${pnl >= 0 ? '+' : '−'}${pnlFormatted}`, isAccent: true },
-        ].map((item, i) => (
-          <React.Fragment key={item.label}>
-            {i > 0 && <div style={{ background: 'rgba(255,255,255,0.05)' }} />}
-            <div style={{ padding: '16px 18px' }}>
-              <div style={{
-                fontFamily: "'Outfit', system-ui, sans-serif",
-                fontSize: '8px',
-                fontWeight: 500,
-                letterSpacing: '0.24em',
-                color: '#555',
-                textTransform: 'uppercase',
-                marginBottom: '6px',
-              }}>
-                {item.label}
-              </div>
-              <div style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: '13px',
-                fontWeight: 500,
-                color: item.isAccent ? accent : '#c0c0c0',
-                letterSpacing: '0.01em',
-              }}>
-                {item.value}
-              </div>
-            </div>
-          </React.Fragment>
-        ))}
-      </div>
-
-      {/* ── FOOTER ── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 24px',
-        background: 'rgba(0,0,0,0.3)',
-      }}>
+      {/* Footer */}
+      <div style={{ position: 'relative', zIndex: 2, background: 'rgba(0,0,0,0.4)', borderTop: isWin ? '1px solid rgba(0,200,83,0.15)' : '1px solid rgba(255,60,60,0.15)', padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontStyle: 'italic',
-            fontWeight: 300,
-            fontSize: '20px',
-            color: accent,
-            letterSpacing: '-0.01em',
-            lineHeight: 1,
-          }}>
-            ENTJournal
-          </div>
-          <div style={{
-            fontFamily: "'Outfit', system-ui, sans-serif",
-            fontSize: '8px',
-            fontWeight: 300,
-            color: '#444',
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            marginTop: '4px',
-          }}>
-            Track · Reflect · Improve
-          </div>
-          <div style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: '8px',
-            color: '#333',
-            letterSpacing: '0.08em',
-            marginTop: '3px',
-          }}>
-            entjournalv1.vercel.app
-          </div>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: accent, letterSpacing: '0.5px' }}>ENTJournal</div>
+            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>Track. Reflect. Improve.</div>
+            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', marginTop: '2px' }}>entjournalv1.vercel.app</div>
         </div>
-        <div style={{
-          background: '#fff',
-          borderRadius: '8px',
-          padding: '4px',
-          width: '44px',
-          height: '44px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <QRCodeCanvas value="https://entjournalv1.vercel.app" size={36} bgColor="#fff" fgColor="#000" />
+        <div style={{ background: '#fff', borderRadius: '6px', padding: '4px', width: '44px', height: '44px' }}>
+            <QRCodeCanvas value="https://entjournalv1.vercel.app" size={36} bgColor="#fff" fgColor="#000" />
         </div>
       </div>
     </div>
   );
 };
+
+const ShareModal = ({ trade, onClose, user, displayCurrency }: any) => {
+    const [preview, setPreview] = React.useState<string | null>(null);
+    const cardRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        if (cardRef.current) {
+            html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#0a0a0a' }).then(canvas => {
+                setPreview(canvas.toDataURL('image/png'));
+            });
+        }
+    }, [trade]);
+
+    const downloadImage = async () => {
+        if (!preview) return;
+        try {
+            const response = await fetch(preview);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `trade-${trade.pair || 'trade'}-${trade.date || Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("Failed to download image", err);
+            alert("Failed to save image. Please take a screenshot instead.");
+        }
+    };
+
+    const shareNative = async () => {
+        if (!preview) return;
+        
+        try {
+            const response = await fetch(preview);
+            const blob = await response.blob();
+            const file = new File([blob], 'trade.png', { type: 'image/png' });
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: 'Trade Analysis',
+                    text: 'Check out this trade!'
+                });
+            } else if (navigator.share) {
+                // Try sharing text if file sharing is not supported
+                await navigator.share({
+                    title: 'Trade Analysis',
+                    text: 'Check out my trade analysis!',
+                    url: window.location.href
+                });
+            } else {
+                 alert("Sharing is not supported on this browser. Please use the Save Image option.");
+            }
+        } catch (err) {
+            console.error("Failed to share", err);
+            alert("Failed to share. Please use the Save Image option.");
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-spotify-card p-8 rounded-3xl w-full max-w-sm border border-white/5 shadow-2xl space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-white font-black uppercase tracking-widest text-sm">Share Trade</h2>
+                    <button onClick={onClose} className="text-spotify-muted hover:text-white transition-colors"><X size={20} /></button>
+                </div>
+                
+                <div className="relative rounded-2xl overflow-hidden shadow-xl border border-white/5 bg-spotify-darker">
+                   {preview ? 
+                     <img src={preview} alt="Trade Preview" className="w-full" /> : 
+                     <div className="h-48 flex items-center justify-center text-spotify-muted">
+                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                            <div className="w-6 h-6 border-2 border-spotify-green border-t-transparent rounded-full" />
+                        </motion.div>
+                     </div>
+                   }
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={downloadImage} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors text-white flex items-center justify-center gap-2 text-xs font-bold">
+                        <Download size={16}/> Save Image
+                    </button>
+                    <button onClick={shareNative} className="p-3 bg-gradient-to-r from-spotify-green to-emerald-600 rounded-2xl hover:opacity-90 transition-opacity text-black flex items-center justify-center gap-2 text-xs font-bold">
+                        <Share2 size={16}/> Share
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => window.open(`https://wa.me/?text=Check+out+my+trade+${window.location.href}`)} className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors text-white flex flex-col items-center gap-2 text-[10px] font-bold">
+                        <MessageCircle size={18} className="text-spotify-muted group-hover:text-white"/> WhatsApp
+                    </button>
+                    <button onClick={() => window.open(`https://twitter.com/intent/tweet?text=Check+out+my+trade+${window.location.href}`)} className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors text-white flex flex-col items-center gap-2 text-[10px] font-bold">
+                        <Twitter size={18} className="text-spotify-muted group-hover:text-white"/> Twitter
+                    </button>
+                    <button onClick={() => navigator.clipboard.writeText(window.location.href)} className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors text-white flex flex-col items-center gap-2 text-[10px] font-bold">
+                         <Copy size={18} className="text-spotify-muted group-hover:text-white"/> Link
+                    </button>
+                </div>
+
+                <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+                    <div ref={cardRef}>
+                        <ShareCard trade={trade} user={user} displayCurrency={displayCurrency} />
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 
 
 const Sidebar = ({ activePage, setActivePage, openRules, isMobileMenuOpen, setIsMobileMenuOpen, displayCurrency, setDisplayCurrency }: any) => {
