@@ -1786,7 +1786,7 @@ If no anomaly: return exactly the word NULL`}]
         <header className="sticky top-0 bg-spotify-black/80 backdrop-blur-xl z-40 px-6 py-5 border-b border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-4">
            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-  <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '28px', width: 'auto' }} />
+  <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '100px', width: 'auto' }} />
 </div>
           </div>
           <div className="flex items-center gap-4">
