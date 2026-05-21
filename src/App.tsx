@@ -2014,13 +2014,13 @@ If no anomaly: return exactly the word NULL`}]
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <StatItem label="Date" value={selectedTrade.date} />
-                <StatItem label="Time" value={selectedTrade.time} />
-                <StatItem label="Lot Size" value={selectedTrade.lot} />
-                <StatItem label="Entry" value={formatNum(selectedTrade.entry || 0)} mono />
-                <StatItem label="Exit" value={formatNum(selectedTrade.exit || 0)} mono />
-                <StatItem label="P&L" value={formatCurrency(convertCurrency(cleanMoney(selectedTrade.pnl || 0), selectedTrade.currency || 'USD', displayCurrency), displayCurrency)} color={selectedTrade.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'} bold />
-                <StatItem label="Result" value={selectedTrade.result.toUpperCase()} />
-                <StatItem label="Setup" value={selectedTrade.setup} />
+<StatItem label="Time" value={selectedTrade.time} />
+<StatItem label="Lot Size" value={selectedTrade.lot} />
+<StatItem label="Entry" value={formatNum(selectedTrade.entry || 0)} mono />
+<StatItem label="Exit" value={formatNum(selectedTrade.exit || 0)} mono />
+<StatItem label="P&L" value={formatCurrency(convertCurrency(cleanMoney(selectedTrade.pnl || 0), selectedTrade.currency || 'USD', displayCurrency), displayCurrency)} color={selectedTrade.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'} bold />
+<StatItem label="Result" value={selectedTrade.result?.toUpperCase()} />
+<StatItem label="Setup" value={selectedTrade.setup} />
               </div>
 
               {selectedTrade.anomaly && (
@@ -2040,7 +2040,7 @@ If no anomaly: return exactly the word NULL`}]
                     <div className="bg-spotify-green/20 p-1.5 rounded-lg">
                       <Sparkles size={14} className="text-spotify-green" />
                     </div>
-                    <h4 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-spotify-green">Gemini AI Audit</h4>
+                    <h4 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-spotify-green">AI Audit</h4>
                   </div>
                   <div className="flex items-center gap-3">
                     <button 
@@ -7005,10 +7005,11 @@ function StatCard({ label, value, sub, valueColor = 'text-white' }: any) {
 }
 
 function StatItem({ label, value, mono, color = 'text-white', bold }: any) {
+  const displayValue = (value === null || value === undefined || value === '') ? '—' : (typeof value === 'string' ? value : isNaN(value) ? '—' : value);
   return (
     <div>
       <div className="text-[9px] font-extrabold uppercase text-spotify-muted tracking-widest mb-1">{label}</div>
-      <div className={`text-sm ${mono ? 'font-mono' : 'font-bold'} ${color} ${bold ? 'font-extrabold text-lg tracking-tighter' : ''}`}>{isNaN(value) ? '—' : value}</div>
+      <div className={`text-sm ${mono ? 'font-mono' : 'font-bold'} ${color} ${bold ? 'font-extrabold text-lg tracking-tighter' : ''}`}>{displayValue}</div>
     </div>
   );
 }
