@@ -110,7 +110,8 @@ import {
   orderBy,
   getDoc,
   getDocFromServer,
-  writeBatch
+  writeBatch,
+  
 } from 'firebase/firestore';
 import { getMessaging, getToken } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -1145,27 +1146,7 @@ const { user, showToast, logout } = useAuth();
 
   // Use prop-based displayCurrency
 
-  useEffect(() => {
-    if (!user) return;
-
-    const tradesPath = `users/${user.uid}/trades`;
-    const qTrades = query(collection(db, tradesPath), orderBy('date', 'desc'));
-    const unsubscribeTrades = onSnapshot(qTrades, (snapshot) => {
-      const dbTrades = snapshot.docs.map(doc => normalizeTrade({ ...doc.data(), id: doc.id }));
-      setTrades(prev => {
-        const tempTrades = prev.filter(t => t.id.startsWith('temp-'));
-        return [...tempTrades, ...dbTrades].sort((a, b) => {
-          const dateComp = b.date.localeCompare(a.date);
-          if (dateComp !== 0) return dateComp;
-          // fall back to time if available, otherwise just use id to maintain stable sort
-          return (b.id || '').localeCompare(a.id || '');
-        });
-      });
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, tradesPath);
-    });
-
-    const normalizeTrade = (data: any): Trade => {
+  const normalizeTrade = (data: any): Trade => {
         const symbol = data.symbol || data.pair || null;
         const direction = data.direction || (data.dir === 'Long' ? 'Long' : data.dir === 'Short' ? 'Short' : null);
         const entryPrice = Number(data.entryPrice || data.entry || 0);
@@ -1174,8 +1155,7 @@ const { user, showToast, logout } = useAuth();
         const takeProfit = Number(data.takeProfit || data.tp || 0);
         const lotSize = Number(data.lotSize || data.lot || 0);
         const result = data.result ? (data.result.toLowerCase() === 'win' ? 'WIN' : data.result.toLowerCase() === 'loss' ? 'LOSS' : data.result.toUpperCase() === 'BREAKEVEN' ? 'BREAKEVEN' : null) : null;
-
-        return {
+            return {
             id: data.id,
             userId: data.userId || '',
             type: data.type || (data.entryPrice !== undefined || data.entry !== undefined ? 'trade' : 'recap'),
@@ -1220,6 +1200,26 @@ const { user, showToast, logout } = useAuth();
         };
     };
 
+
+  useEffect(() => {
+    if (!user) return;
+
+    const tradesPath = `users/${user.uid}/trades`;
+    const qTrades = query(collection(db, tradesPath), orderBy('date', 'desc'));
+    const unsubscribeTrades = onSnapshot(qTrades, (snapshot) => {
+      const dbTrades = snapshot.docs.map(doc => normalizeTrade({ ...doc.data(), id: doc.id }));
+      setTrades(prev => {
+        const tempTrades = prev.filter(t => t.id.startsWith('temp-'));
+        return [...tempTrades, ...dbTrades].sort((a, b) => {
+          const dateComp = b.date.localeCompare(a.date);
+          if (dateComp !== 0) return dateComp;
+          // fall back to time if available, otherwise just use id to maintain stable sort
+          return (b.id || '').localeCompare(a.id || '');
+        });
+      });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, tradesPath);
+    });
 
     const reviewsPath = `users/${user.uid}/reviews`;
     const qReviews = query(collection(db, reviewsPath), orderBy('week', 'desc'));
@@ -1898,6 +1898,7 @@ If no anomaly: return exactly the word NULL`}]
                 displayCurrency={displayCurrency}
                 setIsEditingTrade={setIsEditingTrade}
                 onShareTrade={onShareTrade}
+
               />
             )}
             {activePage === 'calendar' && (
@@ -2022,6 +2023,13 @@ If no anomaly: return exactly the word NULL`}]
 <StatItem label="Result" value={selectedTrade.result?.toUpperCase()} />
 <StatItem label="Setup" value={selectedTrade.setup} />
               </div>
+
+              {selectedTrade.ss && (
+                <div className="mt-4">
+                  <p className="text-[9px] font-extrabold uppercase text-spotify-muted tracking-widest mb-1">Screenshot</p>
+                  <img src={selectedTrade.ss} alt="Trade Screenshot" className="rounded-xl w-full border border-white/10" />
+                </div>
+              )}
 
               {selectedTrade.anomaly && (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5 flex items-start gap-3">
@@ -5681,12 +5689,13 @@ function HabitsPage({ trades, displayCurrency }: any) {
   );
 }
 
-function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDate, setEndDate, onTradeClick, onDelete, onBulkDelete, onBulkUpdate, onImportOpen, onExportOpen, displayCurrency, setIsEditingTrade, onShareTrade }: any) {
+function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDate, setEndDate, onTradeClick, onDelete, onBulkDelete, onBulkUpdate, onImportOpen, onExportOpen, displayCurrency, setIsEditingTrade, onShareTrade, }: any) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const { showToast } = useAuth();
+  const [visibleCount, setVisibleCount] = useState(50);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -5896,7 +5905,7 @@ if (endDate) {
               </tr>
             </thead>
             <tbody>
-              {filteredTrades.map((t: Trade) => (
+              {filteredTrades.slice(0, visibleCount).map((t: Trade) => (
                 <tr 
                   key={t.id} 
                   onClick={() => onTradeClick(t)} 
@@ -5980,6 +5989,15 @@ if (endDate) {
           )}
         </div>
       </div>
+
+{visibleCount < filteredTrades.length && (
+  <button 
+    onClick={() => setVisibleCount(prev => prev + 50)}
+    className="w-full py-4 text-spotify-muted hover:text-white text-[10px] uppercase tracking-widest border border-white/5 rounded-xl hover:bg-white/5 transition-all mt-4"
+  >
+          Load More Trades
+        </button>
+      )}
 
       <BulkEditModal 
         isOpen={isBulkEditOpen} 
