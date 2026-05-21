@@ -225,7 +225,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User | null, displayCurrency: string }) => {
-  const isWin = trade.result === 'WIN';
+  const isWin = trade.pnl > 0;
   const pnl = cleanMoney(trade.pnl);
   const pnlFormatted = formatCurrency(convertCurrency(pnl, trade.currency || 'USD', displayCurrency), displayCurrency);
   const accent = isWin ? '#00C853' : '#ff4466';
@@ -249,8 +249,10 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
     ? 'Bitcoin / US Dollar'
     : (trade.pair || trade.symbol) || '';
 
-  const direction = trade.dir || trade.direction ||'Long';
-  const session = trade.session || '';
+  const direction = (trade.dir === 'Long' || trade.direction === 'Long') ? 'Long' 
+                : (trade.dir === 'Short' || trade.direction === 'Short') ? 'Short'
+                : trade.pnl > 0 ? 'Long' : 'Short';
+const session = trade.session || '';
 
   // Metallic shape styles
   const metallicBase: React.CSSProperties = { position: 'absolute', pointerEvents: 'none' };
@@ -325,16 +327,10 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: '10px',
           fontWeight: 500,
-          letterSpacing: '0.1em',
+          letterSpacing: '0.18em',
           textTransform: 'uppercase',
-          padding: '4px 10px',
-          borderRadius: '6px',
-          marginTop: '2px',
-          textAlign: 'center', 
-          color: accent,
-          background: accentDim,
-          border: `1px solid ${accentBorder}`,
-          flexShrink: 0,
+          marginTop: '2px', 
+          color: badgeColor,
         }}>
           {direction === 'Long' ? 'LONG' : 'SHORT'}
         </div>
