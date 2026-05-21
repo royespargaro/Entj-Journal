@@ -1785,7 +1785,7 @@ If no anomaly: return exactly the word NULL`}]
         {/* Top Header */}
         <header className="sticky top-0 bg-spotify-black/80 backdrop-blur-xl z-40 px-6 py-5 border-b border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <span className="font-extrabold tracking-tighter text-xl uppercase">ENT<span className="text-spotify-green italic">J</span></span>
+            <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '28px', width: 'auto' }} />>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
