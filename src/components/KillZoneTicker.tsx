@@ -24,9 +24,9 @@ function getKillZones(date: Date) {
       dot:     'bg-orange-300',
       glow:    'rgba(253,186,116,0.15)',
       pairs:   ['USD/JPY', 'AUD/USD', 'NZD/USD'],
-      intel:   'Range building. USD consolidates. Mark highs & lows — London will target these.',
+      intel:   'Range building. USD consolidates. Mark highs & lows —  will target these.',
       what:    'Asian Range Formation',
-      icon:    '🌏',
+      icon:    '🥢',
       pip:     '15–20 pip scalp potential',
     },
     {
@@ -80,7 +80,7 @@ function getKillZones(date: Date) {
       pairs:   ['EUR/USD', 'GBP/USD', 'EUR/GBP'],
       intel:   'Position squaring. London banks close books. Can produce sharp reversals or continuation swing entries.',
       what:    'Position Squaring',
-      icon:    '🔔',
+      icon:    '💂‍♀️',
       pip:     'Reversal or continuation',
     },
   ];
@@ -290,7 +290,7 @@ export default function KillZoneTicker() {
                       : 'text-white/20 hover:text-white/40'
                   }`}
                 >
-                  {tab === 'live' ? '⚡ Live Intelligence' : '📅 Full Schedule'}
+                  {tab === 'live' ? 'Live Intelligence' : 'Full Schedule'}
                 </button>
               ))}
             </div>
