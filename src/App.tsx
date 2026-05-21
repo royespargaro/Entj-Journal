@@ -577,7 +577,8 @@ const session = trade.session || '';
       pointerEvents: 'none',
     }} 
   />
-  
+
+  {/* Center text — absolutely centered */}
   <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', zIndex: 1 }}>
     <div style={{
       fontFamily: "'Outfit', system-ui, sans-serif",
@@ -601,6 +602,10 @@ const session = trade.session || '';
     </div>
   </div>
 
+  {/* Spacer — pushes QR to the right */}
+  <div style={{ flex: 1 }} />
+
+  {/* QR — right */}
   <div style={{
     background: '#fff',
     borderRadius: '8px',
