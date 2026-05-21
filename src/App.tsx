@@ -578,7 +578,7 @@ const session = trade.session || '';
     }} 
   />
   
-  <div style={{ position: 'relative', zIndex: 1 }}>
+  <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', zIndex: 1 }}>
     <div style={{
       fontFamily: "'Outfit', system-ui, sans-serif",
       fontSize: '8px',
