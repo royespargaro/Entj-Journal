@@ -1048,7 +1048,7 @@ function LoginPage() {
      <div className="w-full max-w-sm z-10 border border-white/10 p-10 bg-[#0f0f0f]/80 backdrop-blur-xl">
   <div className="mb-10 text-center">
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>   
-  <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '60px', width: 'auto' }} />     
+  <img src="/logo-bull.png" alt="ENTJournal" style={{ height: '100px', width: 'auto' }} />     
       <img src="/logo-wordmark.png" alt="ENTJ" style={{ height: '20px', width: 'auto', opacity: 0.9 }} /> 
     </div>
     <div className="h-[2px] w-8 bg-white mx-auto mt-4 mb-2" />
