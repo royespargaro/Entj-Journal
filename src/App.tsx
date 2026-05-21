@@ -566,8 +566,7 @@ const session = trade.session || '';
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
   <img 
     src="/logo-bull.png" 
-    alt="ENTJournal" 
-    style={{ height: '22px', width: 'auto', opacity: 0.8 }} 
+    style={{ height: '100px', width: 'auto', opacity: 0.8 }} 
   />
           <div style={{
             fontFamily: "'DM Serif Display', Georgia, serif",
@@ -577,18 +576,6 @@ const session = trade.session || '';
             color: accent,
             letterSpacing: '-0.01em',
             lineHeight: 1,
-          }}>
-            ENTJournal
-          </div>
-            </div>
-          <div style={{
-            fontFamily: "'Outfit', system-ui, sans-serif",
-            fontSize: '8px',
-            fontWeight: 300,
-            color: '#444',
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            marginTop: '4px',
           }}>
             Track · Reflect · Improve
           </div>
