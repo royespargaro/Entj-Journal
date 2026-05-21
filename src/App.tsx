@@ -249,9 +249,7 @@ const ShareCard = ({ trade, user, displayCurrency }: { trade: Trade, user: User 
     ? 'Bitcoin / US Dollar'
     : (trade.pair || trade.symbol) || '';
 
-  const direction = (trade.dir === 'Long' || trade.direction === 'Long') ? 'Long' 
-                : (trade.dir === 'Short' || trade.direction === 'Short') ? 'Short'
-                : trade.pnl > 0 ? 'Long' : 'Short';
+  const direction = trade.dir || trade.direction || 'Long';
 const session = trade.session || '';
 
   // Metallic shape styles
