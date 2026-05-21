@@ -616,6 +616,7 @@ const session = trade.session || '';
     <QRCodeCanvas value="https://entjournalv1.vercel.app" size={36} bgColor="#fff" fgColor="#000" />
   </div>
 </div>
+</div>
  );  
 };    
 
