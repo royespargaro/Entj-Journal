@@ -4239,6 +4239,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
   const [isImporting, setIsImporting] = useState(false);
   const [rawRowsForAI, setRawRowsForAI] = useState<any[] | null>(null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [accountCurrency, setAccountCurrency] = useState(displayCurrency);
 
   const finalizeImport = (validTrades: any[]) => {
     if (validTrades.length === 0) {
@@ -4354,7 +4355,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
           sl: sl || null,
           tp: tp || null,
           pnl: profit,
-          currency: displayCurrency,
+currency: accountCurrency,
           result: profit > 0.0001 ? 'win' : (profit < -0.0001 ? 'loss' : 'be'),
           setup: aiMapping ? 'AI Smart Import' : 'MT5 Import',
           session: 'London',
@@ -4452,7 +4453,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
         sl:        Number(row[6]) || null,
         tp:        Number(row[7]) || null,
         pnl:       profit,
-        currency:  displayCurrency,
+        currency:  accountCurrency,
         result:    profit > 0 ? 'win' : profit < 0 ? 'loss' : 'be',
         setup:     'MT5 Import',
         session:   'London',
@@ -4580,7 +4581,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
               sl: sl || null,
               tp: tp || null,
               pnl: netProfit,
-              currency: displayCurrency,
+              currency: accountCurrency,
               result: netProfit > 0.0001 ? 'win' : (netProfit < -0.0001 ? 'loss' : 'be'),
               setup: 'MT5 HTML Import',
               session: 'London',
