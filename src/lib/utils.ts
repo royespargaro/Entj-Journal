@@ -1,11 +1,100 @@
 import { CURRENCIES } from '../constants';
 
-export const convertCurrency = (amount: number, from: string, to: string) => {
+// --- Live Rate Cache ---
+let rateCache: Record<string, number> = {};
+let lastFetched: number = 0;
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
+const fetchLiveRates = async (): Promise<Record<string, number>> => {
+  try {
+    const response = await fetch('https://api.frankfurter.app/latest?from=USD');
+    if (!response.ok) throw new Error('Rate fetch failed');
+    const data = await response.json();
+    // Frankfurter returns rates relative to USD
+    // Add USD itself
+    const rates: Record<string, number> = { USD: 1, ...data.rates };
+    return rates;
+  } catch (e) {
+    console.warn('Live rate fetch failed, using static fallback', e);
+    return {};
+  }
+};
+
+const getLiveRates = async (): Promise<Record<string, number>> => {
+  const now = Date.now();
+  if (Object.keys(rateCache).length > 0 && now - lastFetched < CACHE_DURATION) {
+    return rateCache;
+  }
+  const rates = await fetchLiveRates();
+  if (Object.keys(rates).length > 0) {
+    rateCache = rates;
+    lastFetched = now;
+  }
+  return rateCache;
+};
+
+// Initialize rates on app load
+getLiveRates();
+
+// --- Sync conversion using cached rates (fallback to static) ---
+export const convertCurrency = (amount: number, from: string, to: string): number => {
+  if (from === to) return amount;
+  if (!amount || isNaN(amount)) return 0;
+
+  // Try live cached rates first
+  if (Object.keys(rateCache).length > 0) {
+    const fromRate = rateCache[from] ?? null;
+    const toRate = rateCache[to] ?? null;
+
+    if (fromRate && toRate) {
+      // Convert: amount in 'from' → USD → 'to'
+      const inUsd = amount / fromRate;
+      return inUsd * toRate;
+    }
+  }
+
+  // Fallback to static rates from constants
   const fromRate = CURRENCIES[from as keyof typeof CURRENCIES]?.rate || 1;
   const toRate = CURRENCIES[to as keyof typeof CURRENCIES]?.rate || 1;
-  // Convert to USD first, then to target
   const inUsd = amount / fromRate;
   return inUsd * toRate;
+};
+
+// --- Async version for when you need guaranteed live rates ---
+export const convertCurrencyLive = async (amount: number, from: string, to: string): Promise<number> => {
+  if (from === to) return amount;
+  if (!amount || isNaN(amount)) return 0;
+
+  const rates = await getLiveRates();
+
+  const fromRate = rates[from] ?? CURRENCIES[from as keyof typeof CURRENCIES]?.rate ?? 1;
+  const toRate = rates[to] ?? CURRENCIES[to as keyof typeof CURRENCIES]?.rate ?? 1;
+
+  const inUsd = amount / fromRate;
+  return inUsd * toRate;
+};
+
+// --- Hook for React components to trigger rate refresh ---
+export const refreshRates = async (): Promise<boolean> => {
+  try {
+    const rates = await fetchLiveRates();
+    if (Object.keys(rates).length > 0) {
+      rateCache = rates;
+      lastFetched = Date.now();
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+// --- Get current rate for display ---
+export const getRate = (from: string, to: string): number => {
+  if (from === to) return 1;
+  const fromRate = rateCache[from] ?? CURRENCIES[from as keyof typeof CURRENCIES]?.rate ?? 1;
+  const toRate = rateCache[to] ?? CURRENCIES[to as keyof typeof CURRENCIES]?.rate ?? 1;
+  return toRate / fromRate;
 };
 
 export const formatNum = (val: any, decimals: number = 2) => {
@@ -37,19 +126,13 @@ export const cleanMoney = (val: any): number => {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   
   let s = String(val).trim();
-  
-  // Normalize various dash characters (long dash, minus sign, etc.) to standard hyphen
   s = s.replace(/[−–—]/g, '-');
-  
-  // Remove all spaces (especially thousand separators like 1 000.00)
   s = s.replace(/\s+/g, ''); 
   
-  // Handle (100.00) format for negatives
   if (s.startsWith('(') && s.endsWith(')')) {
     s = '-' + s.substring(1, s.length - 1);
   }
   
-  // International decimal support (e.g. 1.234,56 or 1,234.56)
   if (s.includes(',') && !s.includes('.')) {
     s = s.replace(',', '.');
   } else if (s.includes(',') && s.includes('.')) {
@@ -62,15 +145,11 @@ export const cleanMoney = (val: any): number => {
     s = s.replace(/,/g, '');
   }
 
-  // Handle trailing minus (some banks/brokers)
   if (s.endsWith('-')) {
     s = '-' + s.substring(0, s.length - 1);
   }
 
-  // Final cleanup: keep only digits, dot, and hyphen
   const cleaned = s.replace(/[^\d.\-]/g, '');
-  
-  // Ensure we don't end up with multiple hyphens or dots if input was weird
   const hasMinus = cleaned.startsWith('-');
   const numericPart = cleaned.replace(/-/g, '');
   const dotParts = numericPart.split('.');
