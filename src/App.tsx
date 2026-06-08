@@ -4666,7 +4666,30 @@ currency: accountCurrency,
             <Upload size={32} className="text-spotify-green" />
           </div>
           <h4 className="text-sm font-bold text-white mb-2">Upload your MetaTrader 5 Report</h4>
-          <p className="text-[10px] text-spotify-muted mb-6 max-w-[300px]">Export history from MT5 as CSV, Excel (.xlsx), or HTML. This tool automatically cleans up headers and summary rows.</p>
+          <p className="text-[10px] text-spotify-muted mb-4 max-w-[300px]">Export history from MT5 as CSV, Excel (.xlsx), or HTML. This tool automatically cleans up headers and summary rows.</p>
+          
+          <div className="w-full mb-4 text-left">
+            <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">
+              Broker Account Currency
+            </label>
+            <select
+              value={accountCurrency}
+              onChange={e => setAccountCurrency(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-spotify-green transition-colors"
+            >
+              {Object.entries(CURRENCIES).map(([code, config]: any) => (
+                <option key={code} value={code} className="bg-[#0f0f0f]">
+                  {code} ({config.symbol}) — {config.name}
+                </option>
+              ))}
+            </select>
+            {accountCurrency !== 'USD' && (
+              <p className="text-[10px] text-spotify-green mt-1">
+                ✓ P&L will be saved in {accountCurrency} and auto-converted to your display currency
+              </p>
+            )}
+          </div>
+
           <input 
             type="file" 
             accept=".csv,.html,.htm,.xlsx" 
