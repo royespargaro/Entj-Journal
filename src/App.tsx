@@ -2676,59 +2676,106 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
       </div>
 
 
-      <div className="bg-black/20 backdrop-blur-sm rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl shadow-black/30 transition-all hover:border-white/20">
-        <div className="p-8 border-b border-white/5 flex items-center justify-between flex-wrap gap-4">
-          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white">Latest Activity</h2>
-          <button 
-            onClick={() => setActivePage('history')}
-            className="text-[10px] font-black uppercase tracking-widest text-spotify-muted hover:text-white transition-colors"
-          >
-            Full History
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-[9px] uppercase tracking-[0.2em] text-spotify-muted/50 border-b border-white/5">
-                <th className="px-8 py-4 font-black">Timeline</th>
-                <th className="px-8 py-4 font-black">Asset</th>
-                <th className="px-8 py-4 font-black text-right">Result</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.02]">
-              {trades.slice(0, 5).map((t: Trade) => (
-                <tr key={t.id} onClick={() => onTradeClick(t)} className="group hover:bg-white/[0.03] cursor-pointer transition-all">
-                  <td className="px-8 py-5 text-[10px] font-mono text-spotify-muted">{t.date}</td>
-                  <td className="px-8 py-5">
-                    <p className="text-[11px] font-black text-white">{t.pair}</p>
-                    <p className={`text-[8px] font-bold uppercase tracking-widest mt-0.5 ${t.dir === 'Long' ? 'text-spotify-green' : 'text-red-500'}`}>{t.dir}</p>
-                  </td>
-                  <td className="px-8 py-5 text-[11px] font-black text-right font-mono">
-                    <div className="flex items-center justify-end gap-3">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleShareTrade(t); }}
-                        className="opacity-0 group-hover:opacity-100 p-2 text-spotify-muted hover:text-spotify-green transition-all"
-                        title="Share Result"
-                      >
-                        <Share2 size={12} />
-                      </button>
-                      <span className={t.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}>
-                        {t.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), displayCurrency)}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {trades.length === 0 && (
-            <div className="p-20 text-center text-spotify-muted">
-              <p className="text-sm font-bold mb-1">No trades found</p>
-              <p className="text-xs">Log your first trade to see activities here.</p>
+      <div className="rounded-3xl border border-white/5 overflow-hidden bg-spotify-card">
+  {/* Header */}
+  <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white">Latest Activity</h2>
+      <span className="text-[9px] font-black text-white/20 bg-white/5 px-2 py-0.5 rounded-full uppercase tracking-widest">
+        {trades.slice(0, 5).length} trades
+      </span>
+    </div>
+    <button
+      onClick={() => setActivePage('history')}
+      className="text-[10px] font-black uppercase tracking-widest text-spotify-muted hover:text-spotify-green transition-colors flex items-center gap-1"
+    >
+      Full History <ChevronRight size={12} />
+    </button>
+  </div>
+
+  {/* Trade rows */}
+  <div className="divide-y divide-white/[0.03]">
+    {trades.slice(0, 5).map((t: Trade, idx: number) => {
+      const pnlUsd = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+      const isWin = t.pnl >= 0;
+      return (
+        <motion.div
+          key={t.id}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: idx * 0.05 }}
+          onClick={() => onTradeClick(t)}
+          className="group flex items-center gap-4 px-6 py-4 hover:bg-white/[0.03] cursor-pointer transition-all"
+        >
+          {/* Result indicator */}
+          <div className={`w-1 h-10 rounded-full shrink-0 ${isWin ? 'bg-spotify-green' : 'bg-red-500'}`} />
+
+          {/* Date */}
+          <div className="w-20 shrink-0">
+            <p className="text-[10px] font-mono text-white/30">{t.date?.slice(5)}</p>
+            <p className="text-[9px] font-mono text-white/20">{t.time || ''}</p>
+          </div>
+
+          {/* Pair + Direction */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-black text-white">{t.pair}</p>
+              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                t.dir === 'Long' 
+                  ? 'bg-spotify-green/10 text-spotify-green' 
+                  : 'bg-red-500/10 text-red-400'
+              }`}>
+                {t.dir}
+              </span>
+              {t.setup && (
+                <span className="text-[8px] text-white/20 font-medium truncate hidden md:block">
+                  {t.setup}
+                </span>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+            <p className="text-[9px] text-white/20 mt-0.5">{t.session} session</p>
+          </div>
+
+          {/* P&L bar */}
+          <div className="hidden md:flex items-center gap-2 w-24">
+            <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${isWin ? 'bg-spotify-green' : 'bg-red-500'}`}
+                style={{ width: `${Math.min(100, Math.abs(pnlUsd) / 50 * 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* P&L amount */}
+          <div className="text-right shrink-0">
+            <p className={`text-sm font-black font-mono ${isWin ? 'text-spotify-green' : 'text-red-400'}`}>
+              {isWin ? '+' : ''}{formatCurrency(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), displayCurrency)}
+            </p>
+            <p className={`text-[9px] font-bold uppercase tracking-wider ${isWin ? 'text-spotify-green/50' : 'text-red-500/50'}`}>
+              {t.result?.toUpperCase() || ''}
+            </p>
+          </div>
+
+          {/* Share button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleShareTrade(t); }}
+            className="opacity-0 group-hover:opacity-100 p-2 text-white/20 hover:text-spotify-green transition-all shrink-0"
+          >
+            <Share2 size={14} />
+          </button>
+        </motion.div>
+      );
+    })}
+  </div>
+
+  {/* Empty state */}
+  {trades.length === 0 && (
+    <div className="py-16 text-center">
+      <p className="text-sm font-black text-white/20 uppercase tracking-widest mb-2">No trades yet</p>
+      <p className="text-xs text-white/10">Log your first trade to see activity here</p>
+    </div>
+  )}
+</div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5">
