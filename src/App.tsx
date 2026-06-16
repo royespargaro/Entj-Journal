@@ -2240,8 +2240,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 slide-in-from-bottom-2">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 py-8 relative overflow-hidden rounded-3xl p-10 bg-spotify-card border border-white/5">
-        <div className="relative overflow-hidden rounded-3xl bg-spotify-card border border-white/5">
+      <div className="relative overflow-hidden rounded-3xl bg-spotify-card border border-white/5">
   {/* Background texture */}
   <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
   
@@ -2358,7 +2357,6 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
   </div>
 </div>
-      <div>
       <KillZoneTicker />
       </div>
 
