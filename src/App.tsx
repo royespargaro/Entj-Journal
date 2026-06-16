@@ -2357,6 +2357,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
   </div>
 </div>
+<div>
       <KillZoneTicker />
       </div>
 
