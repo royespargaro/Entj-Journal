@@ -1147,7 +1147,7 @@ const { user, showToast, logout } = useAuth();
   // Use prop-based displayCurrency
 
   const normalizeTrade = (data: any): Trade => {
-        const symbol = data.symbol || data.pair || null;
+        const symbol = (data.symbol || data.pair || null)?.toString().replace(/\.vx$/i, '').replace(/\.m$/i, '').trim() || null;
         const direction = data.direction || (data.dir === 'Long' ? 'Long' : data.dir === 'Short' ? 'Short' : null);
         const entryPrice = Number(data.entryPrice || data.entry || 0);
         const exitPrice = Number(data.exitPrice || data.exit || 0);
@@ -2241,60 +2241,123 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
   return (
     <div className="space-y-10 animate-in fade-in duration-700 slide-in-from-bottom-2">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 py-8 relative overflow-hidden rounded-3xl p-10 bg-spotify-card border border-white/5">
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
-        <div className="space-y-3 relative z-10">
-          <h1 className="text-4xl md:text-7xl font-black tracking-[-0.05em] text-white leading-[0.9] decoration-spotify-green decoration-2 md:decoration-4 underline-offset-4">
-            {greeting}, <span className="text-spotify-green italic">{firstName}</span>
-          </h1>
-          <div className="flex items-center gap-2 flex-wrap pt-2">
-            {sessionInfo.map(s => (
-              <div key={s.name} className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${s.bg} ${s.color} border border-current whitespace-nowrap flex items-center gap-1.5`}>
-                  {s.active && <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 bg-current rounded-full" />}
-                  {s.name}
-                </span>
-              </div>
-            ))}
-          </div>
+        <div className="relative overflow-hidden rounded-3xl bg-spotify-card border border-white/5">
+  {/* Background texture */}
+  <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
+  
+  {/* Green glow top right */}
+  <div className="absolute top-0 right-0 w-[400px] h-[400px] rounded-full bg-spotify-green/5 blur-[80px] pointer-events-none" />
+
+  <div className="flex flex-col md:flex-row md:items-stretch relative z-10">
+    
+    {/* Left — Greeting */}
+    <div className="flex-1 p-8 md:p-12 flex flex-col justify-between gap-6">
+      <div className="space-y-4">
+        {/* Session badges */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {sessionInfo.map(s => (
+            <span key={s.name} className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${s.bg} ${s.color} border border-current whitespace-nowrap flex items-center gap-1.5`}>
+              <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 bg-current rounded-full" />
+              {s.name}
+            </span>
+          ))}
+          {sessionInfo.length === 0 && (
+            <span className="px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest bg-white/5 text-white/30 border border-white/10">
+              Between Sessions
+            </span>
+          )}
         </div>
-        <div className="bg-spotify-card border border-white/5 rounded-3xl p-8 backdrop-blur-xl shadow-none relative z-10 min-w-[240px]">
-          <div className="flex items-center justify-between mb-2 px-1">
-            <p className="text-[10px] font-black text-spotify-muted uppercase tracking-[0.3em]">Portfolio</p>
-            {stats.n > 0 && (
-              <div className="flex items-center gap-1 text-[9px] font-black uppercase text-spotify-green">
-                <ChevronUp size={10} />
-                <span>Active</span>
-              </div>
-            )}
-          </div>
-          <p className={`text-4xl md:text-5xl font-black tracking-tighter ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-            {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
+
+        {/* Greeting */}
+        <h1 className="text-4xl md:text-6xl font-black tracking-[-0.04em] text-white leading-[0.95]">
+          {greeting},<br />
+          <span className="text-spotify-green italic">{firstName}</span>
+        </h1>
+
+        {/* Subtitle */}
+        <p className="text-sm text-white/30 font-medium max-w-xs">
+          {stats.n > 0 
+            ? `${stats.n} trades logged · ${stats.n ? Math.round(stats.wins/stats.n*100) : 0}% win rate · ${stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`} avg R:R`
+            : 'Start logging trades to track your performance'}
+        </p>
+      </div>
+
+      {/* Quick stats row */}
+      <div className="flex items-center gap-6">
+        <div>
+          <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Discipline</p>
+          <p className={`text-2xl font-black tracking-tighter ${stats.n ? Math.round(stats.planFollowed/stats.n*100) : 0 >= 80 ? 'text-spotify-green' : 'text-white'}`}>
+            {stats.n ? Math.round(stats.planFollowed/stats.n*100) : 0}%
           </p>
-          <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[8px] font-bold text-white/30 uppercase tracking-widest">{plan ? 'Monthly Target' : 'Growth'}</p>
-              <p className="text-[10px] font-mono font-bold text-white/50">
-                {plan ? `${Math.round((currentMonthPnl / (plan.monthlyTarget || 1)) * 100)}%` : `+${Math.round(stats.wins / (stats.n || 1) * 100)}% WR`}
-              </p>
-            </div>
-            {plan && (
-              <div className="space-y-1">
-                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, Math.max(0, (currentMonthPnl / plan.monthlyTarget) * 100))}%` }}
-                    className="h-full bg-spotify-green shadow-[0_0_8px_rgba(30,215,96,0.5)]" 
-                  />
-                </div>
-                <div className="flex justify-between items-center text-[7px] font-black uppercase tracking-widest text-white/20">
-                  <span>Daily Goal: {formatCurrency(convertCurrency(plan.monthlyTarget / 20, 'USD', displayCurrency), displayCurrency)}</span>
-                  <span>{formatCurrency(convertCurrency(plan.monthlyTarget - currentMonthPnl, 'USD', displayCurrency), displayCurrency)} left</span>
-                </div>
-              </div>
-            )}
-          </div>
+        </div>
+        <div className="w-px h-8 bg-white/10" />
+        <div>
+          <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Win Rate</p>
+          <p className="text-2xl font-black tracking-tighter text-white">
+            {stats.n ? Math.round(stats.wins/stats.n*100) : 0}%
+          </p>
+        </div>
+        <div className="w-px h-8 bg-white/10" />
+        <div>
+          <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Trades</p>
+          <p className="text-2xl font-black tracking-tighter text-white">{stats.n}</p>
         </div>
       </div>
+    </div>
+
+    {/* Divider */}
+    <div className="hidden md:block w-px bg-white/5 my-8" />
+
+    {/* Right — Portfolio card */}
+    <div className="md:w-[280px] p-8 md:p-10 flex flex-col justify-between gap-6 bg-white/[0.02]">
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Portfolio</p>
+          {stats.n > 0 && (
+            <div className="flex items-center gap-1 text-[9px] font-black uppercase text-spotify-green">
+              <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1.5 h-1.5 bg-spotify-green rounded-full" />
+              <span>Live</span>
+            </div>
+          )}
+        </div>
+        <p className={`text-4xl md:text-5xl font-black tracking-tighter mt-2 ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
+          {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
+        </p>
+      </div>
+
+      {/* Progress bar */}
+      {plan && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Monthly Target</p>
+            <p className="text-[9px] font-black text-spotify-green">{Math.round((currentMonthPnl / plan.monthlyTarget) * 100)}%</p>
+          </div>
+          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.min(100, Math.max(0, (currentMonthPnl / plan.monthlyTarget) * 100))}%` }}
+              className="h-full bg-spotify-green shadow-[0_0_8px_rgba(30,215,96,0.5)] rounded-full"
+            />
+          </div>
+          <div className="flex justify-between text-[8px] font-black text-white/20 uppercase tracking-widest">
+            <span>{formatCurrency(convertCurrency(currentMonthPnl, 'USD', displayCurrency), displayCurrency)} earned</span>
+            <span>{formatCurrency(convertCurrency(plan.monthlyTarget - currentMonthPnl, 'USD', displayCurrency), displayCurrency)} left</span>
+          </div>
+        </div>
+      )}
+
+      {!plan && (
+        <button
+          onClick={() => setActivePage('plan')}
+          className="w-full py-3 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest text-white/30 hover:text-white hover:border-white/20 transition-all"
+        >
+          Set Monthly Target
+        </button>
+      )}
+    </div>
+
+  </div>
+</div>
       <div>
       <KillZoneTicker />
       </div>
