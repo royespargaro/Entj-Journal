@@ -3493,14 +3493,379 @@ function PlanPage({ plan, trades, displayCurrency, onSave, onReset }: any) {
   );
 }
 
-function LogPage({ onLog, displayCurrency, showToast }: any) {
+function QuickLogForm({ onSubmit, displayCurrency, showToast }: any) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    time: new Date().toTimeString().slice(0, 5),
+    pair: 'XAUUSD',
+    dir: 'Long' as 'Long' | 'Short',
+    entry: '',
+    exit: '',
+    sl: '',
+    pnl: '',
+    lot: '0.10',
+    result: 'win' as 'win' | 'loss' | 'be',
+    emotion: 'Calm / Confident',
+    plan: 'no' as 'yes' | 'no' | 'partial',
+    setup: 'MSS + FVG',
+    session: 'London',
+    currency: displayCurrency || 'USD',
+    news: 'no',
+    notes: '',
+    tags: [] as string[],
+    tp: '',
+    dur: '',
+    reason: '',
+    ss: '',
+    riskPercent: '1',
+    balance: '10000',
+  });
+
+  // Auto P&L calc
+  useEffect(() => {
+    const entry = parseFloat(form.entry);
+    const exit  = parseFloat(form.exit);
+    const lot   = parseFloat(form.lot);
+    if (!isNaN(entry) && !isNaN(exit) && !isNaN(lot)) {
+      const config = PAIR_CONFIG[form.pair] || { multiplier: 1 };
+      const diff = form.dir === 'Long' ? (exit - entry) : (entry - exit);
+      const usdPnl = diff * lot * config.multiplier;
+      const finalPnl = convertCurrency(usdPnl, 'USD', form.currency);
+      const formattedPnl = form.currency === 'IDR'
+        ? Math.round(finalPnl).toString()
+        : finalPnl.toFixed(2);
+      let result: 'win' | 'loss' | 'be' = 'be';
+      if (finalPnl > 0.01) result = 'win';
+      else if (finalPnl < -0.01) result = 'loss';
+      setForm(prev => {
+        if (prev.pnl === formattedPnl) return prev;
+        return { ...prev, pnl: formattedPnl, result };
+      });
+    }
+  }, [form.entry, form.exit, form.lot, form.dir, form.pair, form.currency]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setError(null);
+    const entryNum = cleanMoney(form.entry);
+    if (isNaN(entryNum) || entryNum === 0) {
+      setError('Entry price is required');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        ...form,
+        entry: entryNum,
+        exit: cleanMoney(form.exit),
+        pnl: cleanMoney(form.pnl),
+        sl: cleanMoney(form.sl),
+        tp: cleanMoney(form.tp),
+        lot: cleanMoney(form.lot) || 0.01,
+      });
+      setForm(prev => ({ ...prev, entry: '', exit: '', sl: '', pnl: '', notes: '' }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const pnlNum = cleanMoney(form.pnl);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-extrabold tracking-tighter mb-1">Log <span className="italic text-spotify-green">Trade</span></h1>
-        <p className="text-xs font-medium text-spotify-muted">Record every detail — precision builds mastery.</p>
+    <form onSubmit={handleSubmit} className="space-y-4">
+
+      {/* Row 1 — Pair + Direction */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Pair</label>
+          <select
+            value={form.pair}
+            onChange={e => setForm(prev => ({ ...prev, pair: e.target.value }))}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white outline-none focus:border-spotify-green transition-all w-full"
+          >
+            {Object.keys(PAIR_CONFIG).map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Direction</label>
+          <div className="grid grid-cols-2 gap-2 h-[46px]">
+            {(['Long', 'Short'] as const).map(d => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, dir: d }))}
+                className={`rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  form.dir === d
+                    ? d === 'Long'
+                      ? 'bg-spotify-green text-black'
+                      : 'bg-red-500 text-white'
+                    : 'bg-white/5 border border-white/10 text-white/40 hover:text-white'
+                }`}
+              >
+                {d === 'Long' ? '↑ Long' : '↓ Short'}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      <TradeForm onSubmit={onLog} displayCurrency={displayCurrency} showToast={showToast} />
+
+      {/* Row 2 — Entry / Exit / SL */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Entry', key: 'entry' },
+          { label: 'Exit',  key: 'exit'  },
+          { label: 'SL',    key: 'sl'    },
+        ].map(f => (
+          <div key={f.key} className="space-y-1.5">
+            <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">{f.label}</label>
+            <input
+              type="number"
+              step="0.00001"
+              placeholder="0.00"
+              value={(form as any)[f.key]}
+              onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+              className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm font-mono text-white outline-none focus:border-spotify-green transition-all w-full"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Row 3 — Lot + P&L display */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Lot Size</label>
+          <input
+            type="number"
+            step="0.01"
+            value={form.lot}
+            onChange={e => setForm(prev => ({ ...prev, lot: e.target.value }))}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm font-mono text-white outline-none focus:border-spotify-green transition-all w-full"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Calculated P&L</label>
+          <div className={`rounded-xl px-3 py-3 border flex items-center justify-between ${
+            pnlNum > 0 ? 'bg-spotify-green/10 border-spotify-green/30' :
+            pnlNum < 0 ? 'bg-red-500/10 border-red-500/30' :
+            'bg-white/5 border-white/10'
+          }`}>
+            <span className={`text-sm font-black font-mono ${
+              pnlNum > 0 ? 'text-spotify-green' :
+              pnlNum < 0 ? 'text-red-400' : 'text-white/30'
+            }`}>
+              {pnlNum !== 0 ? `${pnlNum > 0 ? '+' : ''}${formatCurrency(convertCurrency(pnlNum, form.currency, displayCurrency), displayCurrency)}` : '—'}
+            </span>
+            <span className={`text-[9px] font-black uppercase tracking-widest ${
+              form.result === 'win' ? 'text-spotify-green' :
+              form.result === 'loss' ? 'text-red-400' : 'text-white/20'
+            }`}>
+              {form.result}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 4 — Date + Time */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Date</label>
+          <input
+            type="date"
+            value={form.date}
+            onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white outline-none focus:border-spotify-green transition-all w-full"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Time (UTC)</label>
+          <input
+            type="time"
+            value={form.time}
+            onChange={e => setForm(prev => ({ ...prev, time: e.target.value }))}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white outline-none focus:border-spotify-green transition-all w-full"
+          />
+        </div>
+      </div>
+
+      {/* Row 5 — Emotion quick-tap */}
+      <div className="space-y-2">
+        <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">How did you feel?</label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { emoji: '😌', label: 'Calm',     value: 'Calm / Confident'  },
+            { emoji: '⚡', label: 'Rushed',   value: 'Excited / Rushed'  },
+            { emoji: '😰', label: 'Fearful',  value: 'Fearful / Hesitant'},
+            { emoji: '😤', label: 'Revenge',  value: 'Revenge'           },
+            { emoji: '🤑', label: 'Greedy',   value: 'Greedy / FOMO'     },
+            { emoji: '😴', label: 'Bored',    value: 'Bored / Distracted'},
+          ].map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setForm(prev => ({ ...prev, emotion: opt.value }))}
+              className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-center transition-all ${
+                form.emotion === opt.value
+                  ? 'bg-spotify-green/20 border-spotify-green'
+                  : 'bg-white/5 border-white/10 hover:bg-white/10'
+              }`}
+            >
+              <span className="text-xl">{opt.emoji}</span>
+              <span className="text-[9px] font-bold text-white/60">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Row 6 — Protocol */}
+      <div className="space-y-2">
+        <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Followed your plan?</label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: '✅ Yes',     value: 'yes',     cls: 'bg-spotify-green/20 border-spotify-green text-spotify-green' },
+            { label: '⚡ Partial', value: 'partial', cls: 'bg-yellow-500/20 border-yellow-500 text-yellow-400'          },
+            { label: '❌ No',      value: 'no',      cls: 'bg-red-500/20 border-red-500 text-red-400'                   },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setForm(prev => ({ ...prev, plan: opt.value as any }))}
+              className={`py-3 rounded-xl border text-[11px] font-black uppercase tracking-wider transition-all ${
+                form.plan === opt.value
+                  ? opt.cls
+                  : 'bg-white/5 border-white/10 text-white/30 hover:text-white'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Row 7 — Setup + Session */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Setup</label>
+          <input
+            type="text"
+            value={form.setup}
+            onChange={e => setForm(prev => ({ ...prev, setup: e.target.value }))}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white outline-none focus:border-spotify-green transition-all w-full"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Session</label>
+          <div className="grid grid-cols-3 gap-1 h-[46px]">
+            {['Asia', 'London', 'New York'].map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, session: s }))}
+                className={`rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+                  form.session === s
+                    ? 'bg-white text-black'
+                    : 'bg-white/5 border border-white/10 text-white/40 hover:text-white'
+                }`}
+              >
+                {s === 'New York' ? 'NY' : s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 8 — Notes (optional, collapsed) */}
+      <div className="space-y-1.5">
+        <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Notes (optional)</label>
+        <textarea
+          value={form.notes}
+          onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
+          placeholder="Quick thought on this trade..."
+          className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-spotify-green transition-all w-full resize-none h-20"
+        />
+      </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl flex items-center gap-2">
+          <AlertCircle size={16} className="text-red-500 shrink-0" />
+          <p className="text-xs font-bold text-red-500">{error}</p>
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full bg-spotify-green text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(29,185,84,0.3)] disabled:opacity-50"
+      >
+        {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} fill="black" />}
+        Log Trade
+      </button>
+    </form>
+  );
+}
+
+function LogPage({ onLog, displayCurrency, showToast }: any) {
+  const [mode, setMode] = useState<'quick' | 'full'>('quick');
+
+  return (
+    <div className="space-y-6">
+      {/* Header + mode toggle */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-4xl font-extrabold tracking-tighter mb-1">
+            Log <span className="italic text-spotify-green">Trade</span>
+          </h1>
+          <p className="text-xs font-medium text-spotify-muted">
+            {mode === 'quick' ? 'Fast entry — key fields only.' : 'Full detail — precision builds mastery.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 bg-white/5 border border-white/10 p-1 rounded-full">
+          <button
+            onClick={() => setMode('quick')}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+              mode === 'quick' ? 'bg-spotify-green text-black' : 'text-white/40 hover:text-white'
+            }`}
+          >
+            ⚡ Quick
+          </button>
+          <button
+            onClick={() => setMode('full')}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+              mode === 'full' ? 'bg-white text-black' : 'text-white/40 hover:text-white'
+            }`}
+          >
+            📋 Full
+          </button>
+        </div>
+      </div>
+
+      {/* Mode content */}
+      <AnimatePresence mode="wait">
+        {mode === 'quick' ? (
+          <motion.div
+            key="quick"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className="bg-spotify-card border border-white/5 rounded-3xl p-6"
+          >
+            <QuickLogForm onSubmit={onLog} displayCurrency={displayCurrency} showToast={showToast} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="full"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+          >
+            <TradeForm onSubmit={onLog} displayCurrency={displayCurrency} showToast={showToast} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -3825,7 +4190,7 @@ Note: ${notes}`
     setup: 'MSS + FVG',
     emotion: 'Calm / Confident',
     news: 'no',
-    plan: 'yes',
+    plan: 'no',
     dur: '',
     reason: '',
     notes: '',
@@ -3934,6 +4299,30 @@ Note: ${notes}`
       });
     }
   }, [riskCalculation, isAutoLot]);
+// Auto-calculate trade duration from date + time fields
+  useEffect(() => {
+    if (!form.date || !form.time) return;
+
+    const now = new Date();
+    const entryDateTime = new Date(`${form.date}T${form.time}`);
+    if (isNaN(entryDateTime.getTime())) return;
+
+    const diffMs = now.getTime() - entryDateTime.getTime();
+    if (diffMs <= 0 || diffMs > 1000 * 60 * 60 * 24) return; // ignore if negative or >24h
+
+    const totalMins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(totalMins / 60);
+    const mins  = totalMins % 60;
+
+    const formatted = hours > 0
+      ? `${hours}h ${mins}m`
+      : `${mins}m`;
+
+    setForm(prev => {
+      if (prev.dur && prev.dur !== '' && !prev.dur.includes('auto')) return prev;
+      return { ...prev, dur: formatted };
+    });
+  }, [form.exit]); // recalculate when exit price is filled in
 
   useEffect(() => {
     const entry = parseFloat(form.entry);
@@ -4237,12 +4626,87 @@ Note: ${notes}`
                 <div className="bg-spotify-card border border-white/5 p-8 rounded-[2rem] space-y-8">
                   <div className="space-y-6">
                     <h3 className="text-xl font-black text-white tracking-tight">Psychology Check</h3>
-                    <div className="grid grid-cols-1 gap-4">
-                      <Select label="Emotional State" value={form.emotion} options={['Calm / Confident', 'Excited / Rushed', 'Fearful / Hesitant', 'Revenge']} onChange={(v:any) => setForm(prev => ({ ...prev, emotion: v }))} />
-                      <Select label="Adherence" value={form.plan} options={[{ label: 'Strict Protocol ✅', value: 'yes' }, { label: 'Intuition / No Plan ❌', value: 'no' }, { label: 'Partial Protocol', value: 'partial' }]} onChange={(v:any) => setForm(prev => ({ ...prev, plan: v as any }))} />
-                      <Select label="Market Context" value={form.news} options={[{ label: 'Clear Skies (No News)', value: 'no' }, { label: 'Medium Impact', value: 'med' }, { label: 'High Impact ⚠️', value: 'high' }]} onChange={(v:any) => setForm(prev => ({ ...prev, news: v as any }))} />
+
+                    {/* EMOTION — emoji quick-tap */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Emotional State</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { emoji: '😌', label: 'Calm / Confident',   value: 'Calm / Confident'   },
+                          { emoji: '⚡', label: 'Excited / Rushed',    value: 'Excited / Rushed'    },
+                          { emoji: '😰', label: 'Fearful / Hesitant', value: 'Fearful / Hesitant'  },
+                          { emoji: '😤', label: 'Revenge',             value: 'Revenge'             },
+                          { emoji: '🤑', label: 'Greedy / FOMO',       value: 'Greedy / FOMO'       },
+                          { emoji: '😴', label: 'Bored / Distracted',  value: 'Bored / Distracted'  },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setForm(prev => ({ ...prev, emotion: opt.value }))}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left ${
+                              form.emotion === opt.value
+                                ? 'bg-spotify-green/20 border-spotify-green text-white shadow-[0_0_12px_rgba(29,185,84,0.2)]'
+                                : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'
+                            }`}
+                          >
+                            <span className="text-xl leading-none">{opt.emoji}</span>
+                            <span className="text-[11px] font-bold leading-tight">{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* PROTOCOL ADHERENCE */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Protocol Adherence</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: '✅ Strict',   value: 'yes',     active: 'bg-spotify-green/20 border-spotify-green text-spotify-green' },
+                          { label: '⚡ Partial',  value: 'partial', active: 'bg-yellow-500/20 border-yellow-500 text-yellow-400' },
+                          { label: '❌ No Plan',  value: 'no',      active: 'bg-red-500/20 border-red-500 text-red-400' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setForm(prev => ({ ...prev, plan: opt.value as any }))}
+                            className={`py-3 px-2 rounded-xl border text-[11px] font-black uppercase tracking-wider transition-all ${
+                              form.plan === opt.value
+                                ? opt.active
+                                : 'bg-white/5 border-white/10 text-white/30 hover:bg-white/10 hover:text-white'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* MARKET CONTEXT */}
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1">Market Context</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { label: '✅ No News',      value: 'no'   },
+                          { label: '⚠️ Med Impact',   value: 'med'  },
+                          { label: '🔴 High Impact',  value: 'high' },
+                        ].map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setForm(prev => ({ ...prev, news: opt.value as any }))}
+                            className={`py-3 px-2 rounded-xl border text-[11px] font-black uppercase tracking-wider transition-all ${
+                              form.news === opt.value
+                                ? 'bg-spotify-green/20 border-spotify-green text-spotify-green'
+                                : 'bg-white/5 border-white/10 text-white/30 hover:bg-white/10 hover:text-white'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
+
                   <div className="space-y-4">
                     <TagInput 
                       label="Strategy Tags" 
@@ -4251,7 +4715,7 @@ Note: ${notes}`
                       placeholder="Scalp, LTF, MSS..." 
                     />
                     <button type="button" onClick={() => handleNotesBlur(form.notes)} className="text-spotify-green hover:text-white flex items-center gap-1 text-[10px] font-bold">
-                        {isTagging ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} AI Smart Tag
+                      {isTagging ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} AI Smart Tag
                     </button>
                   </div>
                 </div>
@@ -4274,7 +4738,23 @@ Note: ${notes}`
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <Input label="Override P&L" type="number" step="0.01" value={form.pnl} onChange={(v:any) => setForm(prev => ({ ...prev, pnl: v }))} />
-                        <Input label="Duration" type="text" placeholder="e.g. 2h 30m" value={form.dur} onChange={(v:any) => setForm(prev => ({ ...prev, dur: v }))} />
+                        <div className="space-y-1.5 flex flex-col group">
+                          <label className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-white/30 ml-1 group-focus-within:text-spotify-green transition-colors">Duration</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Auto-calculated"
+                              value={form.dur}
+                              onChange={e => setForm(prev => ({ ...prev, dur: e.target.value }))}
+                              className="bg-white/5 border border-white/10 rounded-md px-3 py-2.5 text-sm font-medium text-white outline-none focus:border-spotify-green transition-all w-full"
+                            />
+                            {form.time && form.exit && (
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                <span className="text-[9px] font-black text-spotify-green uppercase tracking-widest">auto</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                    </div>
                 </div>
