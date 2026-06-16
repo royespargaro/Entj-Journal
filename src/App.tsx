@@ -2675,30 +2675,6 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
         </div>
       </div>
 
-      <div className="bg-white/[0.02] rounded-3xl p-6 md:p-10 border border-white/5 relative overflow-hidden group">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-8 md:gap-y-0 relative z-10 transition-all duration-500">
-          <div className="flex flex-col items-center md:items-start md:border-r border-white/5 px-4 md:px-0 md:pr-12">
-            <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-3">Trades</p>
-            <p className="text-3xl font-black text-white tracking-tighter">{stats.n}</p>
-          </div>
-          <div className="flex flex-col items-center md:items-start md:border-r border-white/5 px-4 md:px-12">
-            <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-3">Win Rate</p>
-            <p className="text-3xl font-black text-white tracking-tighter">
-              {stats.n ? Math.round(stats.wins/stats.n*100) : 0}%
-            </p>
-          </div>
-          <div className="flex flex-col items-center md:items-start md:border-r border-white/5 px-4 md:px-12">
-            <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-3">Discipline</p>
-            <p className="text-3xl font-black text-white tracking-tighter">
-              {stats.n ? Math.round(stats.planFollowed/stats.n*100) : 0}%
-            </p>
-          </div>
-          <div className="flex flex-col items-center md:items-start px-4 md:px-12">
-            <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-3">Avg R:R</p>
-            <p className="text-3xl font-black text-white tracking-tighter">{stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`}</p>
-          </div>
-        </div>
-      </div>
 
       <div className="bg-black/20 backdrop-blur-sm rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl shadow-black/30 transition-all hover:border-white/20">
         <div className="p-8 border-b border-white/5 flex items-center justify-between flex-wrap gap-4">
