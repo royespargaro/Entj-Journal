@@ -1143,6 +1143,14 @@ const { user, showToast, logout } = useAuth();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [appRules, setAppRules] = useState<any>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid, 'settings', 'rules'))
+      .then(snap => { if (snap.exists()) setAppRules(snap.data()); })
+      .catch(() => {});
+  }, [user]);
 
   // Use prop-based displayCurrency
 
@@ -1367,14 +1375,13 @@ TRADE DETAILS:
 
   // --- Calculations ---
   const stats = useMemo(() => {
-    if (!trades) return { psychologyMap: [], sessionAnalytics: [], topSetups: [], setupPerformanceData: [], setupTrendData: [], sessionData: [], emotionData: [], newsData: [], };
+    if (!trades) return { psychologyMap: [], sessionAnalytics: [], topSetups: [], setupPerformanceData: [], setupTrendData: [], sessionData: [], emotionData: [], behavioralDiscipline: 0 };
     const n = trades.length;
     const wins = trades.filter(t => t.result?.toUpperCase() === 'WIN').length;
-const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
+    const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
     const planFollowed = trades.filter(t => t.plan === 'yes').length;
     const newsSlHits = trades.filter(t => t.news !== 'no' && t.result === 'LOSS').length;
     
-    // Normalize all P&L to USD for internal stats
     const tradesWithUsdPnl = trades.map(t => ({
       ...t,
       usdPnl: convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')
@@ -1392,7 +1399,6 @@ const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
     
-    // Psychology Heatmap
     const psychologyRaw: Record<string, { pnl: number, count: number, wins: number }> = {};
     tradesWithUsdPnl.forEach((t: any) => {
       const e = t.emotion || 'Unknown';
@@ -1408,7 +1414,6 @@ const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
       count: data.count
     })).sort((a, b) => b.pnl - a.pnl);
 
-    // Session Edge
     const sessionRaw: Record<string, { pnl: number, count: number, wins: number }> = {};
     tradesWithUsdPnl.forEach((t: any) => {
       const s = t.session || 'Unknown';
@@ -1424,7 +1429,6 @@ const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
       count: data.count
     }));
 
-    // Expectancy & Forecasting
     const winRateVal = n ? wins / n : 0;
     const winTrades = tradesWithUsdPnl.filter((t: any) => t.result === 'win');
     const lossTrades = tradesWithUsdPnl.filter((t: any) => t.result === 'loss');
@@ -1440,8 +1444,36 @@ const losses = trades.filter(t => t.result?.toUpperCase() === 'LOSS').length;
       twelveMonths: currentBalance + (expectancy * tradesPerMonth * 12)
     };
 
-    return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR, best, worst, psychologyMap, sessionAnalytics, expectancy, projection };
-  }, [trades]);
+    // Behavioral discipline score
+    const maxDaily    = appRules?.maxTradesPerDay  || 5;
+    const allowedSess = appRules?.allowedSessions  || [];
+    const hourStart   = appRules?.tradingHourStart ?? 7;
+    const hourEnd     = appRules?.tradingHourEnd   ?? 20;
+
+    const byDay: Record<string, number> = {};
+    trades.forEach((t: any) => { byDay[t.date] = (byDay[t.date] || 0) + 1; });
+    const dayEntries = Object.values(byDay);
+
+    const timedTrades = trades.filter((t: any) => t.time && t.time.includes(':'));
+
+    const manualTrades = trades.filter((t: any) =>
+      t.plan && t.plan !== 'imported' && t.reason !== 'MT5 History Export'
+    );
+
+    const disciplineChecks: { p: number; t: number }[] = [
+      { p: trades.filter((t: any) => cleanMoney(t.sl) > 0).length, t: trades.length },
+      ...(dayEntries.length ? [{ p: dayEntries.filter(c => c <= maxDaily).length, t: dayEntries.length }] : []),
+      ...(timedTrades.length ? [{ p: timedTrades.filter((t: any) => { const h = parseInt(t.time.split(':')[0]); return h >= hourStart && h < hourEnd; }).length, t: timedTrades.length }] : []),
+      ...(allowedSess.length ? [{ p: trades.filter((t: any) => allowedSess.includes(t.session)).length, t: trades.length }] : []),
+      ...(manualTrades.length ? [{ p: manualTrades.filter((t: any) => t.plan === 'yes').length, t: manualTrades.length }] : []),
+    ];
+
+    const behavioralDiscipline = disciplineChecks.length
+      ? Math.round(disciplineChecks.reduce((s, c) => s + (c.p / c.t) * 100, 0) / disciplineChecks.length)
+      : 0;
+
+    return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline };
+  }, [trades, appRules]);
 
   const addTrade = async (tradeData: any) => {
     if (!user) return;
@@ -2285,8 +2317,8 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
       <div className="flex items-center gap-6">
         <div>
           <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Discipline</p>
-          <p className={`text-2xl font-black tracking-tighter ${stats.n ? Math.round(stats.planFollowed/stats.n*100) : 0 >= 80 ? 'text-spotify-green' : 'text-white'}`}>
-            {stats.n ? Math.round(stats.planFollowed/stats.n*100) : 0}%
+          <p className={`text-2xl font-black tracking-tighter ${(stats.behavioralDiscipline ?? 0) >= 80 ? 'text-spotify-green' : 'text-white'}`}>
+            {stats.behavioralDiscipline ?? 0}%
           </p>
         </div>
         <div className="w-px h-8 bg-white/10" />
@@ -2660,7 +2692,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
                     </div>
                     <div className="flex items-center justify-between text-[10px] font-black uppercase text-spotify-muted tracking-widest">
                       <span>Plan Adherence</span>
-                      <span className="text-white">{trades.length > 0 ? Math.round((trades.filter((t:any) => t.plan === 'yes').length / trades.length) * 100) : 0}%</span>
+                      <span className="text-white">{stats.behavioralDiscipline ?? 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -4447,7 +4479,7 @@ currency: accountCurrency,
           emotion: 'Neutral',
           notes: `${row[notesKey!] || ''} (MT5 ticket ${row[ticketKey || ''] || 'N/A'})`.trim(),
           news: 'no',
-          plan: 'yes',
+          plan: 'imported',
           ss: '',
           dur: '',
           reason: 'MT5 History Export'
@@ -4545,7 +4577,7 @@ currency: accountCurrency,
         emotion:   'Neutral',
         notes:     `Position ID: ${row[1] ?? 'N/A'}`,
         news:      'no',
-        plan:      'yes',
+        plan:      'imported',
         ss:        '',
         dur:       '',
         reason:    'MT5 History Export',
@@ -4673,7 +4705,7 @@ currency: accountCurrency,
               emotion: 'Neutral',
               notes: `${getVal(['comment', 'notes']) || ''} (MT5 Import)`.trim(),
               news: 'no',
-              plan: 'yes',
+              plan: 'imported',
               ss: '',
               dur: '',
               reason: 'MT5 History Export'
@@ -4954,6 +4986,95 @@ function BulkEditModal({ isOpen, onClose, onSave, count }: any) {
 }
 
 function HabitsPage({ trades, displayCurrency }: any) {
+  const { user } = useAuth();
+  const [rulesPreview, setRulesPreview] = useState<any>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid, 'settings', 'rules'))
+      .then(snap => { if (snap.exists()) setRulesPreview(snap.data()); })
+      .catch(() => {});
+  }, [user]);
+
+  const calcBehavioralDiscipline = (arr: any[], rules?: any) => {
+    if (!arr.length) return { score: 0, breakdown: {} as Record<string, any> };
+
+    const maxDaily    = rules?.maxTradesPerDay  || 5;
+    const allowedSess = rules?.allowedSessions  || [];
+    const hourStart   = rules?.tradingHourStart ?? 7;
+    const hourEnd     = rules?.tradingHourEnd   ?? 20;
+
+    const checks: { name: string; passed: number; total: number }[] = [];
+
+    // 1. SL was set
+    checks.push({
+      name: 'SL set',
+      passed: arr.filter((t: any) => cleanMoney(t.sl) > 0).length,
+      total: arr.length
+    });
+
+    // 2. No overtrading
+    const byDay: Record<string, number> = {};
+    arr.forEach((t: any) => { byDay[t.date] = (byDay[t.date] || 0) + 1; });
+    const dayEntries = Object.values(byDay);
+    if (dayEntries.length) {
+      checks.push({
+        name: 'No overtrading',
+        passed: dayEntries.filter(c => c <= maxDaily).length,
+        total: dayEntries.length
+      });
+    }
+
+    // 3. Trading hours
+    const timedTrades = arr.filter((t: any) => t.time && t.time.includes(':'));
+    if (timedTrades.length) {
+      checks.push({
+        name: 'Trading hours',
+        passed: timedTrades.filter((t: any) => {
+          const hour = parseInt(t.time.split(':')[0]);
+          return hour >= hourStart && hour < hourEnd;
+        }).length,
+        total: timedTrades.length
+      });
+    }
+
+    // 4. Allowed sessions
+    if (allowedSess.length > 0) {
+      checks.push({
+        name: 'Session compliance',
+        passed: arr.filter((t: any) => allowedSess.includes(t.session)).length,
+        total: arr.length
+      });
+    }
+
+    // 5. Protocol (manual trades only)
+    const manualTrades = arr.filter((t: any) =>
+      t.plan && t.plan !== 'imported' && t.reason !== 'MT5 History Export'
+    );
+    if (manualTrades.length) {
+      checks.push({
+        name: 'Protocol followed',
+        passed: manualTrades.filter((t: any) => t.plan === 'yes').length,
+        total: manualTrades.length
+      });
+    }
+
+    if (!checks.length) return { score: 0, breakdown: {} };
+
+    const score = Math.round(
+      checks.reduce((sum, c) => sum + (c.passed / c.total) * 100, 0) / checks.length
+    );
+
+    const breakdown = Object.fromEntries(
+      checks.map(c => [c.name, {
+        passed: c.passed,
+        total: c.total,
+        pct: Math.round((c.passed / c.total) * 100)
+      }])
+    );
+
+    return { score, breakdown };
+  };
 
   // ── ARCHETYPE ENGINE ───────────────────────────────────────────────────────
   const getArchetype = (score: number, streak: number, revengeTrades: number, winRate: number, avgRR: number) => {
@@ -5136,11 +5257,13 @@ function HabitsPage({ trades, displayCurrency }: any) {
 
     const weekStat = (arr: any[]) => {
       if (!arr.length) return { pnl: 0, wr: 0, discipline: 0, count: 0, avgRR: 0 };
-      const pnl        = arr.reduce((s: number, t: any) => s + toUsd(t), 0);
-      const wr         = Math.round((arr.filter((t: any) => cleanMoney(t.pnl) > 0).length / arr.length) * 100);
-      const discipline = Math.round((arr.filter((t: any) => t.plan === 'yes').length / arr.length) * 100);
-      const weekRRs    = arr.filter((t: any) => cleanMoney(t.entry) > 0 && cleanMoney(t.sl) > 0).map((t: any) => Math.abs(cleanMoney(t.exit) - cleanMoney(t.entry)) / Math.abs(cleanMoney(t.entry) - cleanMoney(t.sl)));
-      const avgRR      = weekRRs.length ? weekRRs.reduce((a, b) => a + b, 0) / weekRRs.length : 0;
+      const pnl  = arr.reduce((s: number, t: any) => s + toUsd(t), 0);
+      const wr   = Math.round((arr.filter((t: any) => cleanMoney(t.pnl) > 0).length / arr.length) * 100);
+      const { score: discipline } = calcBehavioralDiscipline(arr, rulesPreview);
+      const weekRRs = arr
+        .filter((t: any) => cleanMoney(t.entry) > 0 && cleanMoney(t.sl) > 0)
+        .map((t: any) => Math.abs(cleanMoney(t.exit) - cleanMoney(t.entry)) / Math.abs(cleanMoney(t.entry) - cleanMoney(t.sl)));
+      const avgRR = weekRRs.length ? weekRRs.reduce((a, b) => a + b, 0) / weekRRs.length : 0;
       return { pnl, wr, discipline, count: arr.length, avgRR };
     };
 
