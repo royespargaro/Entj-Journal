@@ -2444,12 +2444,12 @@ const todayStats = useMemo(() => {
           <span className="text-spotify-green italic">{firstName}</span>
         </h1>
 
-        {/* Subtitle */}
-        <p className="text-sm text-white/30 font-medium max-w-xs">
-          {stats.n > 0 
-            ? `${stats.n} trades logged · ${stats.n ? Math.round(stats.wins/stats.n*100) : 0}% win rate · ${stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`} avg R:R`
-            : 'Start logging trades to track your performance'}
-        </p>
+        {/* Empty state only — remove redundant subtitle when data exists */}
+        {stats.n === 0 && (
+          <p className="text-sm text-white/30 font-medium max-w-xs">
+            Start logging trades to track your performance
+          </p>
+        )}
 
         {/* Archetype badge */}
         {stats.archetype && (
@@ -2485,6 +2485,13 @@ const todayStats = useMemo(() => {
           <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Trades</p>
           <p className="text-2xl font-black tracking-tighter text-white">{stats.n}</p>
         </div>
+        <div className="w-px h-8 bg-white/10" />
+        <div>
+          <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Avg R:R</p>
+          <p className="text-2xl font-black tracking-tighter text-white">
+            {stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`}
+          </p>
+        </div>
       </div>
     </div>
 
@@ -2492,7 +2499,7 @@ const todayStats = useMemo(() => {
     <div className="hidden md:block w-px bg-white/5 my-8" />
 
     {/* Right — Portfolio card */}
-    <div className="md:w-[280px] p-8 md:p-10 flex flex-col justify-between gap-6 bg-white/[0.02]">
+    <div className="md:w-[280px] p-8 md:p-10 flex flex-col justify-between gap-6 bg-white/[0.02] overflow-hidden">
       <div>
         <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Portfolio</p>
@@ -2503,7 +2510,10 @@ const todayStats = useMemo(() => {
             </div>
           )}
         </div>
-        <p className={`text-4xl md:text-5xl font-black tracking-tighter mt-2 ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
+        <p 
+          className={`font-black tracking-tighter mt-2 leading-none break-words ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}
+          style={{ fontSize: 'clamp(1.5rem, 7vw, 2.75rem)' }}
+        >
           {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
         </p>
       </div>
