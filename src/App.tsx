@@ -1115,6 +1115,91 @@ function LoginPage() {
   );
 }
 
+// ── ARCHETYPE ENGINE (shared between Dashboard and Habits) ──────────────────
+function getArchetype(score: number, streak: number, revengeTrades: number, winRate: number, avgRR: number) {
+  if (revengeTrades >= 5 && score < 60) return {
+    level: 'Lvl 0 — Danger Zone', persona: 'The Gambler',
+    personaDesc: 'Impulse is driving your decisions, not strategy. Revenge trading is destroying your edge. Stop. Reset. Start with 1 rule only.',
+    icon: '🎰', color: 'text-red-500', borderColor: 'border-red-500/40', bgColor: 'bg-red-500/10',
+    glowColor: 'rgba(239,68,68,0.15)',
+    quest: 'Take 48 hours off. Come back and log 3 trades with zero revenge entries.',
+    nextLevel: 'Log 5 consecutive plan-following trades to escape this zone.',
+    scoreRange: '< 60 + 5 revenge trades'
+  };
+  if (score <= 25) return {
+    level: 'Lvl 1 — Unconscious Incompetence', persona: 'The Tourist',
+    personaDesc: "You don't yet know what you don't know. Every loss feels random. Every win feels like skill. Neither is true yet.",
+    icon: '🗺️', color: 'text-white/50', borderColor: 'border-white/10', bgColor: 'bg-white/[0.03]',
+    glowColor: 'rgba(255,255,255,0.05)',
+    quest: 'Log 10 trades. Any 10. Build the habit of recording before optimizing.',
+    nextLevel: 'Reach 26% discipline score to unlock The Apprentice.',
+    scoreRange: '0 – 25%'
+  };
+  if (score <= 40) return {
+    level: 'Lvl 2 — Conscious Incompetence', persona: 'The Apprentice',
+    personaDesc: "You now know you have gaps. You're aware of your rules but struggle to follow them under pressure. This is where 80% of traders quit.",
+    icon: '📖', color: 'text-orange-400', borderColor: 'border-orange-400/20', bgColor: 'bg-orange-400/5',
+    glowColor: 'rgba(251,146,60,0.12)',
+    quest: 'Follow your plan on 5 consecutive trades without a single deviation.',
+    nextLevel: 'Hit 41% overall score to become The Strategist.',
+    scoreRange: '26 – 40%'
+  };
+  if (score <= 52) return {
+    level: 'Lvl 3 — Pattern Recognition', persona: 'The Strategist',
+    personaDesc: 'You can identify setups but execution is inconsistent. You win when disciplined, lose when emotional. The market is teaching you.',
+    icon: '🧩', color: 'text-yellow-400', borderColor: 'border-yellow-400/20', bgColor: 'bg-yellow-400/5',
+    glowColor: 'rgba(250,204,21,0.12)',
+    quest: 'Achieve a win rate above 45% over your next 20 trades.',
+    nextLevel: 'Reach 53% score + reduce revenge trades to 0 to become The Tactician.',
+    scoreRange: '41 – 52%'
+  };
+  if (score <= 64) return {
+    level: 'Lvl 4 — Conscious Development', persona: 'The Tactician',
+    personaDesc: 'You have a real edge but discipline leaks under pressure. You know your rules — you just break them at critical moments. Close the gap.',
+    icon: '⚔️', color: 'text-blue-400', borderColor: 'border-blue-400/20', bgColor: 'bg-blue-400/5',
+    glowColor: 'rgba(96,165,250,0.12)',
+    quest: `Maintain ${Math.round(avgRR * 10) / 10}+ avg R:R for 15 consecutive trades.`,
+    nextLevel: 'Hit 65% score + 10-trade rule streak to become The Specialist.',
+    scoreRange: '53 – 64%'
+  };
+  if (score <= 74) return {
+    level: 'Lvl 5 — Conscious Competence', persona: 'The Specialist',
+    personaDesc: 'Solid and consistent. You execute your A-setups well and sit on your hands the rest of the time. Most traders never reach this.',
+    icon: '🎯', color: 'text-cyan-400', borderColor: 'border-cyan-400/20', bgColor: 'bg-cyan-400/5',
+    glowColor: 'rgba(34,211,238,0.12)',
+    quest: 'Go 10 trading days without a revenge trade.',
+    nextLevel: 'Hit 75% score + 20-trade discipline streak to become The Operator.',
+    scoreRange: '65 – 74%'
+  };
+  if (score <= 84) return {
+    level: 'Lvl 6 — Process Mastery', persona: 'The Operator',
+    personaDesc: "Process over outcome. You're no longer attached to individual trade results — only to whether you followed the system. This is institutional thinking.",
+    icon: '⚙️', color: 'text-purple-400', borderColor: 'border-purple-400/20', bgColor: 'bg-purple-400/5',
+    glowColor: 'rgba(192,132,252,0.12)',
+    quest: `Hold ${Math.round(winRate * 100)}%+ win rate over next 30 trades without changing your system.`,
+    nextLevel: 'Hit 85% score + zero revenge trades this month to unlock The Sniper.',
+    scoreRange: '75 – 84%'
+  };
+  if (score <= 93) return {
+    level: 'Lvl 7 — Unconscious Competence', persona: 'The Sniper',
+    personaDesc: 'Elite discipline and exceptional risk management. You wait for perfection and strike with precision. Fewer trades, higher quality. This is where real money lives.',
+    icon: '🔭', color: 'text-spotify-green', borderColor: 'border-spotify-green/30', bgColor: 'bg-spotify-green/10',
+    glowColor: 'rgba(29,185,84,0.15)',
+    quest: 'Identify and log only A+ setups for 30 consecutive days.',
+    nextLevel: 'Hit 94%+ score + 50-trade streak to achieve The Architect.',
+    scoreRange: '85 – 93%'
+  };
+  return {
+    level: 'Lvl 8 — System Architect', persona: 'The Architect',
+    personaDesc: 'You no longer trade. You execute a system. Risk is a calculation, not a feeling. Losses are data, not failure. You have built something that works without you.',
+    icon: '🏛️', color: 'text-amber-400', borderColor: 'border-amber-400/30', bgColor: 'bg-amber-400/10',
+    glowColor: 'rgba(251,191,36,0.15)',
+    quest: 'Mentor another trader. Document your full system. Scale to 10x.',
+    nextLevel: 'You have reached the pinnacle. Now build the next level yourself.',
+    scoreRange: '94 – 100%'
+  };
+}
+
 function JournalApp({ onShareTrade, displayCurrency, setDisplayCurrency }: { onShareTrade: (t: Trade) => void, displayCurrency: string, setDisplayCurrency: (c: string) => void }) {
 const { user, showToast, logout } = useAuth();
   
@@ -1471,8 +1556,42 @@ TRADE DETAILS:
     const behavioralDiscipline = disciplineChecks.length
       ? Math.round(disciplineChecks.reduce((s, c) => s + (c.p / c.t) * 100, 0) / disciplineChecks.length)
       : 0;
+// Archetype inputs (lightweight — mirrors HabitsPage logic at app level)
+    const sortedByDate = [...trades].sort((a: any, b: any) =>
+      new Date(a.date + ' ' + (a.time || '00:00')).getTime() -
+      new Date(b.date + ' ' + (b.time || '00:00')).getTime()
+    );
 
-    return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline };
+    let currentStreak = 0;
+    for (const t of [...sortedByDate].reverse()) {
+      if (t.plan === 'yes') currentStreak++;
+      else break;
+    }
+
+    let revengeTradeCount = 0;
+    for (let i = 1; i < sortedByDate.length; i++) {
+      const prev = sortedByDate[i - 1], curr = sortedByDate[i];
+      if (cleanMoney(prev.pnl) < 0 && curr.date === prev.date) {
+        const [ph, pm] = (prev.time || '00:00').split(':').map(Number);
+        const [ch, cm] = (curr.time || '00:00').split(':').map(Number);
+        if ((ch * 60 + cm) - (ph * 60 + pm) <= 15) revengeTradeCount++;
+      }
+    }
+
+    const archetypeRRs = trades.filter((t: any) => {
+      const e = cleanMoney(t.entry), s = cleanMoney(t.sl);
+      return e > 0 && s > 0 && e !== s;
+    }).map((t: any) => {
+      const e = cleanMoney(t.entry), x = cleanMoney(t.exit), s = cleanMoney(t.sl);
+      return Math.abs(x - e) / Math.abs(e - s);
+    });
+    const archetypeAvgRR = archetypeRRs.length ? archetypeRRs.reduce((a, b) => a + b, 0) / archetypeRRs.length : 1;
+
+    const archetype = trades.length > 0
+      ? getArchetype(behavioralDiscipline, currentStreak, revengeTradeCount, winRateVal, archetypeAvgRR)
+      : null;
+
+    return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline, archetype };
   }, [trades, appRules]);
 
   const addTrade = async (tradeData: any) => {
@@ -2257,17 +2376,37 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
     });
 
     let cumulativeUsd = 0;
+    let peak = 0;
     return sorted.map((t, idx) => {
       cumulativeUsd += t.usdPnl;
+      if (cumulativeUsd > peak) peak = cumulativeUsd;
+      const isDrawdown = cumulativeUsd < peak;
       return {
         id: t.id,
         date: t.date,
         displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         cumulativeUsd: Number(cumulativeUsd.toFixed(2)),
+        peakUsd: Number(peak.toFixed(2)),
         tradeUsdPnl: t.usdPnl,
+        isDrawdown,
         index: idx + 1
       };
     });
+  }, [trades]);
+
+const todayStats = useMemo(() => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    const todayTrades = trades.filter((t: any) => t.date === todayKey);
+    if (!todayTrades.length) return null;
+
+    const pnlUsd = todayTrades.reduce((sum: number, t: any) => sum + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
+    const wins = todayTrades.filter((t: any) => cleanMoney(t.pnl) > 0).length;
+
+    return {
+      count: todayTrades.length,
+      pnl: pnlUsd,
+      winRate: Math.round((wins / todayTrades.length) * 100)
+    };
   }, [trades]);
 
   return (
@@ -2311,6 +2450,19 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
             ? `${stats.n} trades logged · ${stats.n ? Math.round(stats.wins/stats.n*100) : 0}% win rate · ${stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`} avg R:R`
             : 'Start logging trades to track your performance'}
         </p>
+
+        {/* Archetype badge */}
+        {stats.archetype && (
+          <button
+            onClick={() => setActivePage('habits')}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${stats.archetype.borderColor} ${stats.archetype.bgColor} hover:scale-105 transition-all`}
+          >
+            <span className="text-base leading-none">{stats.archetype.icon}</span>
+            <span className={`text-[10px] font-black uppercase tracking-widest ${stats.archetype.color}`}>
+              {stats.archetype.persona}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Quick stats row */}
@@ -2357,25 +2509,45 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
       </div>
 
       {/* Progress bar */}
-      {plan && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Monthly Target</p>
-            <p className="text-[9px] font-black text-spotify-green">{Math.round((currentMonthPnl / plan.monthlyTarget) * 100)}%</p>
+      {plan && (() => {
+        const now = new Date();
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const dayOfMonth = now.getDate();
+        const expectedPct = (dayOfMonth / daysInMonth) * 100;
+        const actualPct = Math.round((currentMonthPnl / plan.monthlyTarget) * 100);
+        const isBehindPace = actualPct < expectedPct - 5; // 5% buffer before flagging
+
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Monthly Target</p>
+              <p className={`text-[9px] font-black ${isBehindPace ? 'text-red-400' : 'text-spotify-green'}`}>
+                {actualPct}% {isBehindPace ? '· behind pace' : ''}
+              </p>
+            </div>
+            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+              <div
+                className="absolute top-0 h-full w-px bg-white/30 z-10"
+                style={{ left: `${Math.min(100, expectedPct)}%` }}
+                title="Expected pace"
+              />
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, Math.max(0, actualPct))}%` }}
+                className={`h-full rounded-full transition-colors ${
+                  isBehindPace
+                    ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
+                    : 'bg-spotify-green shadow-[0_0_8px_rgba(30,215,96,0.5)]'
+                }`}
+              />
+            </div>
+            <div className="flex justify-between text-[8px] font-black text-white/20 uppercase tracking-widest">
+              <span>{formatCurrency(convertCurrency(currentMonthPnl, 'USD', displayCurrency), displayCurrency)} earned</span>
+              <span>{formatCurrency(convertCurrency(plan.monthlyTarget - currentMonthPnl, 'USD', displayCurrency), displayCurrency)} left</span>
+            </div>
           </div>
-          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min(100, Math.max(0, (currentMonthPnl / plan.monthlyTarget) * 100))}%` }}
-              className="h-full bg-spotify-green shadow-[0_0_8px_rgba(30,215,96,0.5)] rounded-full"
-            />
-          </div>
-          <div className="flex justify-between text-[8px] font-black text-white/20 uppercase tracking-widest">
-            <span>{formatCurrency(convertCurrency(currentMonthPnl, 'USD', displayCurrency), displayCurrency)} earned</span>
-            <span>{formatCurrency(convertCurrency(plan.monthlyTarget - currentMonthPnl, 'USD', displayCurrency), displayCurrency)} left</span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {!plan && (
         <button
@@ -2387,8 +2559,40 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
       )}
     </div>
 
-  </div>
+ </div>
 </div>
+
+{todayStats && (
+  <motion.div
+    initial={{ opacity: 0, y: 8 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 flex items-center justify-between gap-6 flex-wrap"
+  >
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-2xl bg-spotify-green/10 flex items-center justify-center">
+        <Zap size={18} className="text-spotify-green" />
+      </div>
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Today's Session</p>
+        <p className="text-sm font-bold text-white/80">{todayStats.count} trade{todayStats.count !== 1 ? 's' : ''} logged so far</p>
+      </div>
+    </div>
+    <div className="flex items-center gap-6">
+      <div className="text-right">
+        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">P&L</p>
+        <p className={`text-xl font-black ${todayStats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
+          {todayStats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(todayStats.pnl, 'USD', displayCurrency), displayCurrency)}
+        </p>
+      </div>
+      <div className="w-px h-8 bg-white/10" />
+      <div className="text-right">
+        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Win Rate</p>
+        <p className="text-xl font-black text-white">{todayStats.winRate}%</p>
+      </div>
+    </div>
+  </motion.div>
+)}
+
 <div>
       <KillZoneTicker />
       </div>
@@ -2556,6 +2760,10 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
                       <stop offset="5%" stopColor="#1DB954" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#1DB954" stopOpacity={0}/>
                     </linearGradient>
+                    <linearGradient id="colorDrawdown" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ff4444" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#ff4444" stopOpacity={0.05}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                   <XAxis 
@@ -2599,6 +2807,14 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
                       }
                       return null;
                     }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="peakUsd" 
+                    stroke="none"
+                    fill="url(#colorDrawdown)"
+                    fillOpacity={0.6}
+                    isAnimationActive={false}
                   />
                   <Area 
                     type="monotone" 
@@ -5556,90 +5772,7 @@ function HabitsPage({ trades, displayCurrency }: any) {
     return { score, breakdown };
   };
 
-  // ── ARCHETYPE ENGINE ───────────────────────────────────────────────────────
-  const getArchetype = (score: number, streak: number, revengeTrades: number, winRate: number, avgRR: number) => {
-    if (revengeTrades >= 5 && score < 60) return {
-      level: 'Lvl 0 — Danger Zone', persona: 'The Gambler',
-      personaDesc: 'Impulse is driving your decisions, not strategy. Revenge trading is destroying your edge. Stop. Reset. Start with 1 rule only.',
-      icon: '🎰', color: 'text-red-500', borderColor: 'border-red-500/40', bgColor: 'bg-red-500/10',
-      glowColor: 'rgba(239,68,68,0.15)',
-      quest: 'Take 48 hours off. Come back and log 3 trades with zero revenge entries.',
-      nextLevel: 'Log 5 consecutive plan-following trades to escape this zone.',
-      scoreRange: '< 60 + 5 revenge trades'
-    };
-    if (score <= 25) return {
-      level: 'Lvl 1 — Unconscious Incompetence', persona: 'The Tourist',
-      personaDesc: "You don't yet know what you don't know. Every loss feels random. Every win feels like skill. Neither is true yet.",
-      icon: '🗺️', color: 'text-white/50', borderColor: 'border-white/10', bgColor: 'bg-white/[0.03]',
-      glowColor: 'rgba(255,255,255,0.05)',
-      quest: 'Log 10 trades. Any 10. Build the habit of recording before optimizing.',
-      nextLevel: 'Reach 26% discipline score to unlock The Apprentice.',
-      scoreRange: '0 – 25%'
-    };
-    if (score <= 40) return {
-      level: 'Lvl 2 — Conscious Incompetence', persona: 'The Apprentice',
-      personaDesc: "You now know you have gaps. You're aware of your rules but struggle to follow them under pressure. This is where 80% of traders quit.",
-      icon: '📖', color: 'text-orange-400', borderColor: 'border-orange-400/20', bgColor: 'bg-orange-400/5',
-      glowColor: 'rgba(251,146,60,0.12)',
-      quest: 'Follow your plan on 5 consecutive trades without a single deviation.',
-      nextLevel: 'Hit 41% overall score to become The Strategist.',
-      scoreRange: '26 – 40%'
-    };
-    if (score <= 52) return {
-      level: 'Lvl 3 — Pattern Recognition', persona: 'The Strategist',
-      personaDesc: 'You can identify setups but execution is inconsistent. You win when disciplined, lose when emotional. The market is teaching you.',
-      icon: '🧩', color: 'text-yellow-400', borderColor: 'border-yellow-400/20', bgColor: 'bg-yellow-400/5',
-      glowColor: 'rgba(250,204,21,0.12)',
-      quest: 'Achieve a win rate above 45% over your next 20 trades.',
-      nextLevel: 'Reach 53% score + reduce revenge trades to 0 to become The Tactician.',
-      scoreRange: '41 – 52%'
-    };
-    if (score <= 64) return {
-      level: 'Lvl 4 — Conscious Development', persona: 'The Tactician',
-      personaDesc: 'You have a real edge but discipline leaks under pressure. You know your rules — you just break them at critical moments. Close the gap.',
-      icon: '⚔️', color: 'text-blue-400', borderColor: 'border-blue-400/20', bgColor: 'bg-blue-400/5',
-      glowColor: 'rgba(96,165,250,0.12)',
-      quest: `Maintain ${Math.round(avgRR * 10) / 10}+ avg R:R for 15 consecutive trades.`,
-      nextLevel: 'Hit 65% score + 10-trade rule streak to become The Specialist.',
-      scoreRange: '53 – 64%'
-    };
-    if (score <= 74) return {
-      level: 'Lvl 5 — Conscious Competence', persona: 'The Specialist',
-      personaDesc: 'Solid and consistent. You execute your A-setups well and sit on your hands the rest of the time. Most traders never reach this.',
-      icon: '🎯', color: 'text-cyan-400', borderColor: 'border-cyan-400/20', bgColor: 'bg-cyan-400/5',
-      glowColor: 'rgba(34,211,238,0.12)',
-      quest: 'Go 10 trading days without a revenge trade.',
-      nextLevel: 'Hit 75% score + 20-trade discipline streak to become The Operator.',
-      scoreRange: '65 – 74%'
-    };
-    if (score <= 84) return {
-      level: 'Lvl 6 — Process Mastery', persona: 'The Operator',
-      personaDesc: "Process over outcome. You're no longer attached to individual trade results — only to whether you followed the system. This is institutional thinking.",
-      icon: '⚙️', color: 'text-purple-400', borderColor: 'border-purple-400/20', bgColor: 'bg-purple-400/5',
-      glowColor: 'rgba(192,132,252,0.12)',
-      quest: `Hold ${Math.round(winRate * 100)}%+ win rate over next 30 trades without changing your system.`,
-      nextLevel: 'Hit 85% score + zero revenge trades this month to unlock The Sniper.',
-      scoreRange: '75 – 84%'
-    };
-    if (score <= 93) return {
-      level: 'Lvl 7 — Unconscious Competence', persona: 'The Sniper',
-      personaDesc: 'Elite discipline and exceptional risk management. You wait for perfection and strike with precision. Fewer trades, higher quality. This is where real money lives.',
-      icon: '🔭', color: 'text-spotify-green', borderColor: 'border-spotify-green/30', bgColor: 'bg-spotify-green/10',
-      glowColor: 'rgba(29,185,84,0.15)',
-      quest: 'Identify and log only A+ setups for 30 consecutive days.',
-      nextLevel: 'Hit 94%+ score + 50-trade streak to achieve The Architect.',
-      scoreRange: '85 – 93%'
-    };
-    return {
-      level: 'Lvl 8 — System Architect', persona: 'The Architect',
-      personaDesc: 'You no longer trade. You execute a system. Risk is a calculation, not a feeling. Losses are data, not failure. You have built something that works without you.',
-      icon: '🏛️', color: 'text-amber-400', borderColor: 'border-amber-400/30', bgColor: 'bg-amber-400/10',
-      glowColor: 'rgba(251,191,36,0.15)',
-      quest: 'Mentor another trader. Document your full system. Scale to 10x.',
-      nextLevel: 'You have reached the pinnacle. Now build the next level yourself.',
-      scoreRange: '94 – 100%'
-    };
-  };
+  
 
   // ── STATS ENGINE ───────────────────────────────────────────────────────────
   const habitStats = useMemo(() => {
