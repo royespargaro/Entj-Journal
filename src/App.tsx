@@ -2056,7 +2056,7 @@ If no anomaly: return exactly the word NULL`}]
               <CalendarPage trades={trades} displayCurrency={displayCurrency} />
             )}
             {activePage === 'habits' && (
-              <HabitsPage trades={trades} displayCurrency={displayCurrency} />
+              <HabitsPage trades={trades} displayCurrency={displayCurrency} stats={stats} />
             )}
             {activePage === 'analytics' && (
               <AnalyticsPage trades={trades} displayCurrency={displayCurrency} />
@@ -2380,15 +2380,15 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
     return sorted.map((t, idx) => {
       cumulativeUsd += t.usdPnl;
       if (cumulativeUsd > peak) peak = cumulativeUsd;
-      const isDrawdown = cumulativeUsd < peak;
       return {
         id: t.id,
         date: t.date,
         displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         cumulativeUsd: Number(cumulativeUsd.toFixed(2)),
-        peakUsd: Number(peak.toFixed(2)),
+        // Render only the gap below peak as a separate stacked segment — this is what gets shaded red
+        drawdownFloor: Number(cumulativeUsd.toFixed(2)),
+        drawdownGap: Number((peak - cumulativeUsd).toFixed(2)),
         tradeUsdPnl: t.usdPnl,
-        isDrawdown,
         index: idx + 1
       };
     });
@@ -2757,12 +2757,8 @@ const todayStats = useMemo(() => {
                 <AreaChart data={dashboardChartData}>
                   <defs>
                     <linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#1DB954" stopOpacity={0.3}/>
+                      <stop offset="5%" stopColor="#1DB954" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#1DB954" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorDrawdown" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ff4444" stopOpacity={0.35}/>
-                      <stop offset="95%" stopColor="#ff4444" stopOpacity={0.05}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -2810,20 +2806,30 @@ const todayStats = useMemo(() => {
                   />
                   <Area 
                     type="monotone" 
-                    dataKey="peakUsd" 
+                    dataKey="drawdownFloor" 
+                    stackId="dd"
                     stroke="none"
-                    fill="url(#colorDrawdown)"
-                    fillOpacity={0.6}
+                    fill="transparent"
+                    isAnimationActive={false}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="drawdownGap" 
+                    stackId="dd"
+                    stroke="none"
+                    fill="#ff4444"
+                    fillOpacity={0.12}
                     isAnimationActive={false}
                   />
                   <Area 
                     type="monotone" 
                     dataKey="cumulativeUsd" 
                     stroke="#1DB954" 
-                    strokeWidth={3}
+                    strokeWidth={2.5}
                     fillOpacity={1} 
                     fill="url(#colorPnl)" 
                     isAnimationActive={window.innerWidth > 768}
+                    dot={false}
                   />
                   {window.innerWidth >= 1024 && <Brush dataKey="displayDate" height={30} stroke="rgba(255,255,255,0.1)" fill="rgba(255,255,255,0.02)" />}
                 </AreaChart>
@@ -5681,7 +5687,7 @@ function BulkEditModal({ isOpen, onClose, onSave, count }: any) {
   );
 }
 
-function HabitsPage({ trades, displayCurrency }: any) {
+function HabitsPage({ trades, displayCurrency, stats }: any) {
   const { user } = useAuth();
   const [rulesPreview, setRulesPreview] = useState<any>(null);
 
@@ -5821,7 +5827,7 @@ function HabitsPage({ trades, displayCurrency }: any) {
     });
     const avgRR = rrs.length ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 1;
 
-    const overallScore = Math.round((adherenceScore + riskScore + (winRate * 100)) / 3);
+    const overallScore = stats?.behavioralDiscipline ?? Math.round((adherenceScore + riskScore + (winRate * 100)) / 3);
 
     // Tilt detection
     let consecutiveLosses = 0;
