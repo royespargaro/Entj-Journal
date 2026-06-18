@@ -2469,7 +2469,7 @@ const todayStats = useMemo(() => {
       <div className="flex items-center gap-6">
         <div>
           <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Discipline</p>
-          <p className={`text-2xl font-black tracking-tighter ${(stats.behavioralDiscipline ?? 0) >= 80 ? 'text-spotify-green' : 'text-white'}`}>
+          <p className={`text-2xl font-black tracking-tighter ${(stats.behavioralDiscipline ?? 0) >= 80 ? 'text-spotify-green drop-shadow-[0_0_12px_rgba(29,185,84,0.4)]' : 'text-white'}`}>
             {stats.behavioralDiscipline ?? 0}%
           </p>
         </div>
@@ -2511,7 +2511,7 @@ const todayStats = useMemo(() => {
           )}
         </div>
         <p 
-          className={`font-black tracking-tighter mt-2 leading-none break-words ${stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}
+          className={`font-black tracking-tighter mt-2 leading-none break-words ${stats.pnl >= 0 ? 'text-spotify-green drop-shadow-[0_0_16px_rgba(29,185,84,0.35)]' : 'text-red-500 drop-shadow-[0_0_16px_rgba(239,68,68,0.3)]'}`}
           style={{ fontSize: 'clamp(1.5rem, 7vw, 2.75rem)' }}
         >
           {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
@@ -2745,7 +2745,8 @@ const todayStats = useMemo(() => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white/[0.02] rounded-3xl p-6 md:p-10 border border-white/5">
+        <div className="lg:col-span-2 relative bg-white/[0.03] rounded-3xl p-6 md:p-10 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden group transition-all hover:border-spotify-green/20">
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-spotify-green/5 rounded-full blur-[100px] pointer-events-none group-hover:bg-spotify-green/10 transition-all duration-700" />
           <div className="flex flex-col gap-4 mb-8">
             <div className="flex items-center justify-between">
               <h3 className="text-[10px] font-black uppercase tracking-0.3em text-spotify-muted">Equity Timeline</h3>
@@ -2852,9 +2853,8 @@ const todayStats = useMemo(() => {
             )}
           </div>
         </div>
-
         <div className="space-y-6">
-          <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px]">
+          <div className="bg-white/[0.015] border border-white/[0.04] rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px] transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
             <div>
               <p className="text-[10px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-6">Plan Status</p>
               {plan ? (
@@ -2895,7 +2895,8 @@ const todayStats = useMemo(() => {
             )}
           </div>
 
-          <div className="bg-spotify-green/10 border border-spotify-green/20 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px]">
+          <div className="relative bg-gradient-to-br from-spotify-green/15 via-spotify-green/5 to-transparent border border-spotify-green/30 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px] shadow-[0_8px_40px_rgba(29,185,84,0.1)] overflow-hidden group transition-all hover:shadow-[0_8px_50px_rgba(29,185,84,0.18)] hover:border-spotify-green/40">
+            <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-spotify-green/10 rounded-full blur-[80px] pointer-events-none group-hover:bg-spotify-green/20 transition-all duration-700" />
              <div>
                 <p className="text-[10px] font-black text-spotify-green uppercase tracking-[0.3em] mb-6">Psychological Edge</p>
                 <div className="space-y-4">
@@ -2931,16 +2932,16 @@ const todayStats = useMemo(() => {
              </div>
              <button 
                 onClick={() => setActivePage('habits')}
-                className="w-full py-4 bg-spotify-green text-black rounded-2xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-all"
+                className="w-full py-4 bg-spotify-green text-black rounded-2xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-all relative z-10"
               >
                 Habit Analysis
               </button>
           </div>
+          </div>
         </div>
-      </div>
 
 
-      <div className="rounded-3xl border border-white/5 overflow-hidden bg-spotify-card">
+      <div className="rounded-3xl border border-white/[0.04] overflow-hidden bg-white/[0.015]">
   {/* Header */}
   <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between">
     <div className="flex items-center gap-3">
@@ -2969,7 +2970,7 @@ const todayStats = useMemo(() => {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: idx * 0.05 }}
           onClick={() => onTradeClick(t)}
-          className="group flex items-center gap-4 px-6 py-4 hover:bg-white/[0.03] cursor-pointer transition-all"
+          className="group flex items-center gap-4 px-6 py-4 hover:bg-white/[0.04] hover:translate-x-1 cursor-pointer transition-all duration-200"
         >
           {/* Result indicator */}
           <div className={`w-1 h-10 rounded-full shrink-0 ${isWin ? 'bg-spotify-green' : 'bg-red-500'}`} />
@@ -3041,7 +3042,7 @@ const todayStats = useMemo(() => {
   )}
 </div>
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white/[0.02] rounded-3xl p-8 border border-white/5">
+        <div className="lg:col-span-2 bg-white/[0.015] rounded-3xl p-8 border border-white/[0.04] transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Psychology</h3>
           </div>
@@ -3078,7 +3079,7 @@ const todayStats = useMemo(() => {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5">
+          <div className="bg-white/[0.015] rounded-3xl p-8 border border-white/[0.04] transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Timing</h3>
               <div className="flex items-center gap-1.5">
@@ -3118,7 +3119,7 @@ const todayStats = useMemo(() => {
             </div>
           </div>
 
-          <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5 flex flex-col justify-between">
+          <div className="bg-white/[0.015] rounded-3xl p-8 border border-white/[0.04] flex flex-col justify-between transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
             <div className="space-y-8">
               <div className="flex items-center justify-between">
                 <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Risk</h3>
