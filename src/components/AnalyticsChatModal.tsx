@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { X, SendHorizontal, Bot } from 'lucide-react';
 import Markdown from 'react-markdown';
+import { buildCompactContext } from '../lib/aiContext';
 
 interface AnalyticsChatModalProps {
   onClose: () => void;
