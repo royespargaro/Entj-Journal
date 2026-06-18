@@ -3040,73 +3040,128 @@ const todayStats = useMemo(() => {
     </div>
   )}
 </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5">
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white/[0.02] rounded-3xl p-8 border border-white/5">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Psychology</h3>
           </div>
-          <div className="space-y-4">
-            {stats.psychologyMap.length > 0 ? stats.psychologyMap.map((item: any) => (
-              <div key={item.emotion} className="flex items-center justify-between group">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-bold text-white group-hover:text-spotify-green transition-colors">{item.emotion}</p>
-                  <p className="text-[8px] text-spotify-muted uppercase tracking-tighter">{item.winRate}% SR</p>
-                </div>
-                <div className={`text-[11px] font-mono font-black ${item.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-                  {item.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(item.pnl, 'USD', displayCurrency), displayCurrency)}
-                </div>
-              </div>
-            )) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+            {stats.psychologyMap.length > 0 ? (() => {
+              const maxAbs = Math.max(...stats.psychologyMap.map((i: any) => Math.abs(i.pnl)), 1);
+              return stats.psychologyMap.map((item: any) => {
+                const barPct = Math.min(100, (Math.abs(item.pnl) / maxAbs) * 100);
+                const isPos = item.pnl >= 0;
+                return (
+                  <div key={item.emotion} className="group space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-white group-hover:text-spotify-green transition-colors">{item.emotion}</p>
+                        <p className="text-[8px] text-spotify-muted uppercase tracking-tighter">{item.winRate}% SR</p>
+                      </div>
+                      <div className={`text-[11px] font-mono font-black ${isPos ? 'text-spotify-green' : 'text-red-500'}`}>
+                        {isPos ? '+' : ''}{formatCurrency(convertCurrency(item.pnl, 'USD', displayCurrency), displayCurrency)}
+                      </div>
+                    </div>
+                    <div className="h-[3px] bg-white/5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${isPos ? 'bg-spotify-green' : 'bg-red-500'}`}
+                        style={{ width: `${barPct}%`, opacity: 0.5 }}
+                      />
+                    </div>
+                  </div>
+                );
+              });
+            })() : (
               <p className="text-center py-10 text-[10px] text-spotify-muted font-bold uppercase tracking-widest">No emotional data recorded</p>
             )}
           </div>
         </div>
 
-        <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Timing</h3>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-spotify-green rounded-full animate-pulse" />
-              <span className="text-[8px] font-black uppercase tracking-widest text-spotify-green">Live Monitoring</span>
+        <div className="space-y-6">
+          <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Timing</h3>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-spotify-green rounded-full animate-pulse" />
+                <span className="text-[8px] font-black uppercase tracking-widest text-spotify-green">Live Monitoring</span>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {stats.sessionAnalytics.length > 0 ? (() => {
+                const maxAbs = Math.max(...stats.sessionAnalytics.map((i: any) => Math.abs(i.pnl)), 1);
+                return stats.sessionAnalytics.map((item: any) => {
+                  const barPct = Math.min(100, (Math.abs(item.pnl) / maxAbs) * 100);
+                  const isPos = item.pnl >= 0;
+                  return (
+                    <div key={item.session} className="group space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[11px] font-bold text-white group-hover:text-spotify-green transition-colors">{item.session}</p>
+                          <p className="text-[8px] text-spotify-muted uppercase tracking-widest mt-1">{item.winRate}% SR</p>
+                        </div>
+                        <div className={`text-[11px] font-mono font-black ${isPos ? 'text-spotify-green' : 'text-red-500'}`}>
+                          {isPos ? '+' : ''}{formatCurrency(convertCurrency(item.pnl, 'USD', displayCurrency), displayCurrency)}
+                        </div>
+                      </div>
+                      <div className="h-[3px] bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${isPos ? 'bg-spotify-green' : 'bg-red-500'}`}
+                          style={{ width: `${barPct}%`, opacity: 0.5 }}
+                        />
+                      </div>
+                    </div>
+                  );
+                });
+              })() : (
+                <p className="text-center py-10 text-[10px] text-spotify-muted font-bold uppercase tracking-widest">No session data points</p>
+              )}
             </div>
           </div>
-          <div className="space-y-4">
-            {stats.sessionAnalytics.length > 0 ? stats.sessionAnalytics.map((item: any) => (
-              <div key={item.session} className="flex items-center justify-between group">
+
+          <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5 flex flex-col justify-between">
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Risk</h3>
+              </div>
+              
+              <div className="space-y-6">
                 <div>
-                  <p className="text-[11px] font-bold text-white group-hover:text-spotify-green transition-colors">{item.session}</p>
-                  <p className="text-[8px] text-spotify-muted uppercase tracking-widest mt-1">{item.winRate}% SR</p>
+                  <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-2">Max Drawdown</p>
+                  <p className="text-2xl font-black text-white tracking-tighter">
+                    {formatCurrency(convertCurrency(stats.worst?.pnl || 0, 'USD', displayCurrency), displayCurrency)}
+                  </p>
                 </div>
-                <div className={`text-[11px] font-mono font-black ${item.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-                  {item.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(item.pnl, 'USD', displayCurrency), displayCurrency)}
+                
+                <div className="pt-2 border-t border-white/5">
+                  <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-2">Best Session</p>
+                  <p className="text-2xl font-black text-spotify-green tracking-tighter">
+                    {stats.best ? `+${formatCurrency(convertCurrency(cleanMoney(stats.best.pnl), stats.best.currency || 'USD', displayCurrency), displayCurrency)}` : '—'}
+                  </p>
+                  <p className="text-[8px] font-bold text-spotify-muted mt-1 uppercase tracking-widest">{stats.best?.date || 'No record'}</p>
                 </div>
               </div>
-            )) : (
-              <p className="text-center py-10 text-[10px] text-spotify-muted font-bold uppercase tracking-widest">No session data points</p>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white/[0.02] rounded-3xl p-8 border border-white/5 space-y-8">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Risk</h3>
-          </div>
-          
-          <div className="space-y-6">
-            <div>
-              <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-2">Max Drawdown</p>
-              <p className="text-2xl font-black text-white tracking-tighter">
-                {formatCurrency(convertCurrency(stats.worst?.pnl || 0, 'USD', displayCurrency), displayCurrency)}
-              </p>
             </div>
-            
-            <div className="pt-2">
-              <p className="text-[9px] font-black text-spotify-muted uppercase tracking-[0.3em] mb-2">Best Session</p>
-              <p className="text-2xl font-black text-spotify-green tracking-tighter">
-                {stats.best ? `+${formatCurrency(convertCurrency(cleanMoney(stats.best.pnl), stats.best.currency || 'USD', displayCurrency), displayCurrency)}` : '—'}
-              </p>
-              <p className="text-[8px] font-bold text-spotify-muted mt-1 uppercase tracking-widest">{stats.best?.date || 'No record'}</p>
+
+            <div className="pt-6 mt-2 border-t border-white/5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[8px] font-black text-spotify-muted uppercase tracking-widest">Drawdown vs Best</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden flex">
+                  {(() => {
+                    const dd = Math.abs(stats.worst?.pnl || 0);
+                    const best = Math.abs(stats.best?.pnl || 0) || 1;
+                    const total = dd + best;
+                    const ddPct = total > 0 ? (dd / total) * 100 : 0;
+                    return (
+                      <>
+                        <div className="h-full bg-red-500" style={{ width: `${ddPct}%`, opacity: 0.5 }} />
+                        <div className="h-full bg-spotify-green" style={{ width: `${100 - ddPct}%`, opacity: 0.5 }} />
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
         </div>
