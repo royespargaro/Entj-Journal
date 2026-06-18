@@ -43,7 +43,7 @@ export const AnalyticsChatModal: React.FC<AnalyticsChatModalProps> = ({ onClose,
 - Line breaks between sections
 - Be direct, specific, and data-driven. No fluff. No filler sentences.
 - Call out weaknesses brutally. Reinforce strengths clearly.
-Trader data: ${JSON.stringify(context)}` },
+Trader summary: ${JSON.stringify(buildCompactContext(context))}` },
           ...[...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
         ],
         max_tokens: 1000,

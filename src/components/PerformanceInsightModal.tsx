@@ -51,7 +51,40 @@ const QUICK_QUESTIONS = [
   "What emotion is killing my performance?",
   "Should I increase my lot size?",
 ];
-
+function buildCompactContext(context: any) {
+  if (!context) return {};
+  
+  return {
+    shortWinRate: context.swr,
+    longWinRate: context.lwr,
+    shortsCount: context.shortsCount,
+    longsCount: context.longsCount,
+    avgRR: context.avgRR,
+    bestSession: context.sessionData?.length 
+      ? [...context.sessionData].sort((a: any, b: any) => b.wr - a.wr)[0]?.name 
+      : null,
+    // Top 5 sessions by win rate, not the full array
+    sessionSummary: (context.sessionData || []).slice(0, 5).map((s: any) => ({
+      name: s.name, winRate: s.wr, pnl: Math.round(s.pnl), trades: s.count
+    })),
+    // Top 5 emotions, not the full array
+    emotionSummary: (context.emotionData || []).slice(0, 5).map((e: any) => ({
+      name: e.name, winRate: e.wr, pnl: Math.round(e.pnl), trades: e.count
+    })),
+    // Top 5 setups, not the full array
+    topSetups: (context.setupPerformanceData || []).slice(0, 5).map((s: any) => ({
+      name: s.name, winRate: s.wr, pnl: Math.round(s.pnl), trades: s.count
+    })),
+    bestTrade: context.bestTrade ? {
+      pair: context.bestTrade.pair, pnl: Math.round(context.bestTrade.usdPnl), date: context.bestTrade.date
+    } : null,
+    worstTrade: context.worstTrade ? {
+      pair: context.worstTrade.pair, pnl: Math.round(context.worstTrade.usdPnl), date: context.worstTrade.date
+    } : null,
+    newsImpact: context.newsData,
+    // Explicitly exclude: sessionTrendData, setupTrendData (these are day-by-day arrays — the biggest token consumers)
+  };
+}
 export const PerformanceInsightModal: React.FC<PerformanceInsightModalProps> = ({ onClose, context }) => {
   const [insight, setInsight] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,7 +105,7 @@ export const PerformanceInsightModal: React.FC<PerformanceInsightModalProps> = (
       const messages: any[] = [
         {
           role: 'system',
-          content: `You are an elite prop desk trading mentor — direct, experienced, brutally honest. You genuinely care about this trader's growth. Reassure where results are earned, challenge hard where improvement is needed. Never sugarcoat. Always end with something that makes them want to act immediately. Trader data: ${JSON.stringify(context)}`
+          content: `You are an elite prop desk trading mentor — direct, experienced, brutally honest. You genuinely care about this trader's growth. Reassure where results are earned, challenge hard where improvement is needed. Never sugarcoat. Always end with something that makes them want to act immediately. Trader summary: ${JSON.stringify(buildCompactContext(context))}`
         },
         { role: 'user', content: mode.prompt }
       ];
