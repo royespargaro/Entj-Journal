@@ -2745,8 +2745,10 @@ const todayStats = useMemo(() => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 relative bg-white/[0.03] rounded-3xl p-6 md:p-10 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden group transition-all hover:border-spotify-green/20">
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-spotify-green/5 rounded-full blur-[100px] pointer-events-none group-hover:bg-spotify-green/10 transition-all duration-700" />
+        <div className="lg:col-span-2 relative bg-white/[0.03] rounded-3xl p-6 md:p-10 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden group transition-all hover:border-spotify-green/25">
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-spotify-green/40 to-transparent" />
+          <div className="absolute -top-24 -right-24 w-72 h-72 bg-spotify-green/8 rounded-full blur-[100px] pointer-events-none group-hover:bg-spotify-green/14 transition-all duration-700" />
+          <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-spotify-green/4 rounded-full blur-[100px] pointer-events-none" />
           <div className="flex flex-col gap-4 mb-8">
             <div className="flex items-center justify-between">
               <h3 className="text-[10px] font-black uppercase tracking-0.3em text-spotify-muted">Equity Timeline</h3>
@@ -2941,7 +2943,7 @@ const todayStats = useMemo(() => {
         </div>
 
 
-      <div className="rounded-3xl border border-white/[0.04] overflow-hidden bg-white/[0.015]">
+      <div className="rounded-3xl border border-white/[0.04] overflow-hidden bg-[#0d0d0d]">
   {/* Header */}
   <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between">
     <div className="flex items-center gap-3">
@@ -3079,7 +3081,7 @@ const todayStats = useMemo(() => {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white/[0.015] rounded-3xl p-8 border border-white/[0.04] transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
+          <div className="bg-white/[0.025] rounded-3xl p-8 border border-white/[0.06] transition-all duration-300 hover:bg-white/[0.04] hover:border-white/[0.1]">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Timing</h3>
               <div className="flex items-center gap-1.5">
