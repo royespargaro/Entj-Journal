@@ -2329,6 +2329,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
   const handleShareTrade = onShareTrade;
 
   const [hasRules, setHasRules] = useState(false);
+  const [chartMetric, setChartMetric] = useState<'equity' | 'drawdown' | 'winrate'>('equity');
   const [rulesPreview, setRulesPreview] = useState<any>(null);
 
   useEffect(() => {
@@ -2393,7 +2394,7 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
     return { greeting: g, sessionInfo: sessions.filter(s => s.active) };
   }, []);
 
-  const dashboardChartData = useMemo(() => {
+ const dashboardChartData = useMemo(() => {
     if (!trades || !trades.length) return [];
     const tradesWithUsdPnl = trades.map(t => ({
       ...t,
@@ -2408,18 +2409,33 @@ function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActive
 
     let cumulativeUsd = 0;
     let peak = 0;
+    let runningWins = 0;
+
     return sorted.map((t, idx) => {
       cumulativeUsd += t.usdPnl;
       if (cumulativeUsd > peak) peak = cumulativeUsd;
+      const drawdownPct = peak > 0 ? ((peak - cumulativeUsd) / peak) * 100 : 0;
+
+      if (t.usdPnl > 0) runningWins++;
+      const runningWinRate = Math.round((runningWins / (idx + 1)) * 100);
+
+      const isWin = t.usdPnl > 0;
+      const isLoss = t.usdPnl < 0;
+
       return {
         id: t.id,
         date: t.date,
+        pair: t.pair,
+        dir: t.dir,
         displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         cumulativeUsd: Number(cumulativeUsd.toFixed(2)),
-        // Render only the gap below peak as a separate stacked segment — this is what gets shaded red
         drawdownFloor: Number(cumulativeUsd.toFixed(2)),
         drawdownGap: Number((peak - cumulativeUsd).toFixed(2)),
+        drawdownPct: Number(drawdownPct.toFixed(1)),
+        winRate: runningWinRate,
         tradeUsdPnl: t.usdPnl,
+        isWin,
+        isLoss,
         index: idx + 1
       };
     });
@@ -2786,32 +2802,62 @@ const todayStats = useMemo(() => {
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-spotify-green/40 to-transparent" />
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-spotify-green/8 rounded-full blur-[100px] pointer-events-none group-hover:bg-spotify-green/14 transition-all duration-700" />
           <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-spotify-green/4 rounded-full blur-[100px] pointer-events-none" />
-          <div className="flex flex-col gap-4 mb-8">
-            <div className="flex items-center justify-between">
+
+          <div className="relative z-10 flex flex-col gap-6 mb-8">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted flex items-center gap-2">
                 <span className="w-1 h-1 rounded-full bg-spotify-green/60" />
-                Equity Timeline
+                Performance Timeline
               </h3>
               <select 
                 value={chartType} 
                 onChange={(e) => setChartType(e.target.value as 'Area' | 'Line' | 'Bar')}
-                className="bg-black/40 text-spotify-muted border border-white/10 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-widest focus:outline-none"
+                className="bg-black/40 text-spotify-muted border border-white/10 rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-widest focus:outline-none"
               >
                 <option value="Area">Area</option>
                 <option value="Line">Line</option>
                 <option value="Bar">Bar</option>
               </select>
             </div>
+
+            {/* Metric switcher */}
+            <div className="flex items-center gap-1 bg-black/30 border border-white/5 p-1 rounded-full w-fit">
+              {[
+                { id: 'equity', label: 'Equity', color: 'spotify-green' },
+                { id: 'drawdown', label: 'Drawdown', color: 'red-400' },
+                { id: 'winrate', label: 'Win Rate', color: 'blue-400' },
+              ].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setChartMetric(m.id as any)}
+                  className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                    chartMetric === m.id 
+                      ? 'bg-white text-black' 
+                      : 'text-white/40 hover:text-white'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
           </div>
           
-          <div className="h-[250px] md:h-[300px] w-full mt-4 bg-black/20 rounded-2xl p-4 border border-white/5 backdrop-blur-sm" style={{ minHeight: 250, minWidth: 0 }}>
+          <div className="relative z-10 h-[260px] md:h-[300px] w-full bg-black/20 rounded-2xl p-4 border border-white/5 backdrop-blur-sm" style={{ minHeight: 250, minWidth: 0 }}>
             {dashboardChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+              <ResponsiveContainer width="100%" height="100%" minHeight={260}>
                 <AreaChart data={dashboardChartData}>
                   <defs>
                     <linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#1DB954" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#1DB954" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorDrawdownLine" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ff4444" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#ff4444" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorWinRate" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -2826,6 +2872,7 @@ const todayStats = useMemo(() => {
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 700 }}
+                    tickFormatter={(v) => chartMetric === 'drawdown' || chartMetric === 'winrate' ? `${v}%` : v}
                   />
                   <Tooltip 
                     content={({ active, payload }: any) => {
@@ -2835,11 +2882,19 @@ const todayStats = useMemo(() => {
                         const formattedCumulative = formatCurrency(convertCurrency(data.cumulativeUsd, 'USD', displayCurrency), displayCurrency);
                         
                         return (
-                          <div className="bg-[#121212] border border-white/10 rounded-xl p-3 shadow-2xl backdrop-blur-md">
-                            <p className="text-[9px] font-black uppercase text-spotify-muted tracking-widest mb-2 pb-1.5 border-b border-white/5">
-                              {new Date(data.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                            <div className="space-y-1.5 pt-0.5">
+                          <div className="bg-[#121212] border border-white/10 rounded-xl p-3 shadow-2xl backdrop-blur-md min-w-[180px]">
+                            <div className="flex items-center justify-between gap-3 pb-2 mb-2 border-b border-white/5">
+                              <p className="text-[9px] font-black uppercase text-spotify-muted tracking-widest">
+                                {new Date(data.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                              </p>
+                              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${data.isWin ? 'bg-spotify-green/20 text-spotify-green' : data.isLoss ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-white/50'}`}>
+                                {data.isWin ? 'WIN' : data.isLoss ? 'LOSS' : 'BE'}
+                              </span>
+                            </div>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between gap-8">
+                                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">{data.pair} · {data.dir}</span>
+                              </div>
                               <div className="flex items-center justify-between gap-8">
                                 <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Trade P&L</span>
                                 <span className={`text-[10px] font-black ${data.tradeUsdPnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
@@ -2850,6 +2905,18 @@ const todayStats = useMemo(() => {
                                 <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Equity</span>
                                 <span className="text-[10px] font-black text-white">{formattedCumulative}</span>
                               </div>
+                              {chartMetric === 'drawdown' && (
+                                <div className="flex items-center justify-between gap-8">
+                                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Drawdown</span>
+                                  <span className="text-[10px] font-black text-red-400">-{data.drawdownPct}%</span>
+                                </div>
+                              )}
+                              {chartMetric === 'winrate' && (
+                                <div className="flex items-center justify-between gap-8">
+                                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Running Win Rate</span>
+                                  <span className="text-[10px] font-black text-blue-400">{data.winRate}%</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
@@ -2857,34 +2924,65 @@ const todayStats = useMemo(() => {
                       return null;
                     }}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="drawdownFloor" 
-                    stackId="dd"
-                    stroke="none"
-                    fill="transparent"
-                    isAnimationActive={false}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="drawdownGap" 
-                    stackId="dd"
-                    stroke="none"
-                    fill="#ff4444"
-                    fillOpacity={0.12}
-                    isAnimationActive={false}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="cumulativeUsd" 
-                    stroke="#1DB954" 
-                    strokeWidth={2.5}
-                    fillOpacity={1} 
-                    fill="url(#colorPnl)" 
-                    isAnimationActive={window.innerWidth > 768}
-                    dot={false}
-                  />
-                  {window.innerWidth >= 1024 && <Brush dataKey="displayDate" height={30} stroke="rgba(255,255,255,0.1)" fill="rgba(255,255,255,0.02)" />}
+
+                  {chartMetric === 'equity' && (
+                    <>
+                      <Area dataKey="drawdownFloor" stackId="dd" stroke="none" fill="transparent" isAnimationActive={false} />
+                      <Area dataKey="drawdownGap" stackId="dd" stroke="none" fill="#ff4444" fillOpacity={0.1} isAnimationActive={false} />
+                      <Area 
+                        type="monotone" 
+                        dataKey="cumulativeUsd" 
+                        stroke="#1DB954" 
+                        strokeWidth={2.5}
+                        fillOpacity={1} 
+                        fill="url(#colorPnl)" 
+                        isAnimationActive={window.innerWidth > 768}
+                        dot={(props: any) => {
+                          const { cx, cy, payload } = props;
+                          if (!payload.isWin && !payload.isLoss) return <></>;
+                          return (
+                            <circle 
+                              key={`dot-${payload.id}`}
+                              cx={cx} 
+                              cy={cy} 
+                              r={2.5} 
+                              fill={payload.isWin ? '#1DB954' : '#ff4444'} 
+                              stroke="#0a0a0a"
+                              strokeWidth={1}
+                            />
+                          );
+                        }}
+                      />
+                    </>
+                  )}
+
+                  {chartMetric === 'drawdown' && (
+                    <Area 
+                      type="monotone" 
+                      dataKey="drawdownPct" 
+                      stroke="#ff4444" 
+                      strokeWidth={2.5}
+                      fillOpacity={1} 
+                      fill="url(#colorDrawdownLine)" 
+                      isAnimationActive={window.innerWidth > 768}
+                      dot={false}
+                    />
+                  )}
+
+                  {chartMetric === 'winrate' && (
+                    <Area 
+                      type="monotone" 
+                      dataKey="winRate" 
+                      stroke="#3b82f6" 
+                      strokeWidth={2.5}
+                      fillOpacity={1} 
+                      fill="url(#colorWinRate)" 
+                      isAnimationActive={window.innerWidth > 768}
+                      dot={false}
+                    />
+                  )}
+
+                  {window.innerWidth >= 1024 && <Brush dataKey="displayDate" height={26} stroke="rgba(255,255,255,0.1)" fill="rgba(255,255,255,0.02)" />}
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -2894,6 +2992,22 @@ const todayStats = useMemo(() => {
               </div>
             )}
           </div>
+
+          {/* Win/loss density strip */}
+          {dashboardChartData.length > 0 && (
+            <div className="relative z-10 mt-4 flex items-center gap-0.5 h-6 px-1">
+              {dashboardChartData.slice(-60).map((d: any) => (
+                <div
+                  key={d.id}
+                  className={`flex-1 rounded-sm transition-all ${
+                    d.isWin ? 'bg-spotify-green' : d.isLoss ? 'bg-red-500' : 'bg-white/10'
+                  }`}
+                  style={{ height: d.isWin || d.isLoss ? `${Math.min(100, Math.abs(d.tradeUsdPnl) / 2)}%` : '20%', opacity: 0.5, minHeight: '4px' }}
+                  title={`${d.pair} · ${d.tradeUsdPnl >= 0 ? '+' : ''}${d.tradeUsdPnl.toFixed(2)}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className="space-y-6">
           <div className="bg-white/[0.015] border border-white/[0.04] rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px] transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
