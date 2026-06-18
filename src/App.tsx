@@ -127,7 +127,6 @@ const generateTradeFingerprint = (t: any) => {
 };
 
 const app = initializeApp(firebaseConfig);
-const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const messaging = getMessaging(app);
 export const auth = getAuth(app);
