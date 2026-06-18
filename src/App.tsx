@@ -1553,9 +1553,10 @@ TRADE DETAILS:
       ...(manualTrades.length ? [{ p: manualTrades.filter((t: any) => t.plan === 'yes').length, t: manualTrades.length }] : []),
     ];
 
-    const behavioralDiscipline = disciplineChecks.length
-      ? Math.round(disciplineChecks.reduce((s, c) => s + (c.p / c.t) * 100, 0) / disciplineChecks.length)
+    const behavioralDisciplineRaw = disciplineChecks.length
+      ? disciplineChecks.reduce((s, c) => s + (c.t > 0 ? (c.p / c.t) * 100 : 0), 0) / disciplineChecks.length
       : 0;
+    const behavioralDiscipline = Number.isFinite(behavioralDisciplineRaw) ? Math.round(behavioralDisciplineRaw) : 0;
 // Archetype inputs (lightweight — mirrors HabitsPage logic at app level)
     const sortedByDate = [...trades].sort((a: any, b: any) =>
       new Date(a.date + ' ' + (a.time || '00:00')).getTime() -
@@ -2292,23 +2293,32 @@ If no anomaly: return exactly the word NULL`}]
 
 // --- Page Components ---
 function CountUpNumber({ value, formatter, className }: { value: number; formatter: (v: number) => string; className?: string }) {
-  const [display, setDisplay] = useState(0);
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const [display, setDisplay] = useState(safeValue);
 
   useEffect(() => {
     let start: number | null = null;
     const duration = 800;
     const initial = display;
-    const delta = value - initial;
+    const delta = safeValue - initial;
 
+    if (!Number.isFinite(delta)) {
+      setDisplay(safeValue);
+      return;
+    }
+
+    let frameId: number;
     const step = (timestamp: number) => {
       if (start === null) start = timestamp;
       const progress = Math.min((timestamp - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
       setDisplay(initial + delta * eased);
-      if (progress < 1) requestAnimationFrame(step);
+      if (progress < 1) frameId = requestAnimationFrame(step);
     };
-    requestAnimationFrame(step);
-  }, [value]);
+    frameId = requestAnimationFrame(step);
+
+    return () => cancelAnimationFrame(frameId);
+  }, [safeValue]);
 
   return <span className={className}>{formatter(display)}</span>;
 }
