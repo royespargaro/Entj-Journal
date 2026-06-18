@@ -5712,6 +5712,7 @@ currency: accountCurrency,
                 ✓ P&L will be saved in {accountCurrency} and auto-converted to your display currency
               </p>
             ) : null}
+          </div>
 
           <input 
             type="file" 
