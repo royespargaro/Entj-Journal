@@ -108,17 +108,21 @@ export const formatNum = (val: any, decimals: number = 2) => {
 };
 
 export const formatCurrency = (val: any, currency: string = 'USD') => {
-  const meta = CURRENCIES[currency as keyof typeof CURRENCIES] || CURRENCIES.USD;
-  const decimals = currency === 'IDR' ? 0 : 2;
+  const meta = (CURRENCIES as any)[currency] || CURRENCIES.USD;
   const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/,/g, '')) || 0;
   const absVal = Math.abs(n);
   const sign = n < 0 ? '-' : '';
-  
-  if (currency === 'IDR') {
+
+  if (currency === 'IDR' || currency === 'IDC') {
     return `${sign}${meta.symbol}${Math.round(absVal).toLocaleString('id-ID')}`;
   }
-  
-  return `${sign}${meta.symbol}${formatNum(absVal, decimals)}`;
+
+  // Cent accounts — show with cent symbol and 2 decimals
+  if (meta.isCent) {
+    return `${sign}${meta.symbol}${formatNum(absVal, 2)}`;
+  }
+
+  return `${sign}${meta.symbol}${formatNum(absVal, 2)}`;
 };
 
 export const cleanMoney = (val: any): number => {

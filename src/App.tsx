@@ -5671,24 +5671,47 @@ currency: accountCurrency,
           <div className="w-full mb-4 text-left">
             <label className="text-[10px] font-black text-spotify-muted uppercase tracking-widest mb-2 block">
               Broker Account Currency
-            </label>
-            <select
+            </label><select
               value={accountCurrency}
               onChange={e => setAccountCurrency(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-spotify-green transition-colors"
             >
-              {Object.entries(CURRENCIES).map(([code, config]: any) => (
-                <option key={code} value={code} className="bg-[#0f0f0f]">
-                  {code} ({config.symbol}) — {config.name}
-                </option>
-              ))}
+              <optgroup label="── Standard Currencies ──" style={{ backgroundColor: '#0f0f0f', color: '#666' }}>
+                {Object.entries(CURRENCIES)
+                  .filter(([_, config]: any) => !config.isCent)
+                  .map(([code, config]: any) => (
+                    <option key={code} value={code} style={{ backgroundColor: '#0f0f0f' }}>
+                      {code} ({config.symbol}) — {config.name}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label="── Cent Accounts ──" style={{ backgroundColor: '#0f0f0f', color: '#666' }}>
+                {Object.entries(CURRENCIES)
+                  .filter(([_, config]: any) => config.isCent)
+                  .map(([code, config]: any) => (
+                    <option key={code} value={code} style={{ backgroundColor: '#0f0f0f' }}>
+                      {code} ({config.symbol}) — {config.name}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
-            {accountCurrency !== 'USD' && (
+
+            {/* Dynamic info message based on currency type */}
+            {(CURRENCIES as any)[accountCurrency]?.isCent ? (
+              <div className="bg-spotify-green/10 border border-spotify-green/20 rounded-xl px-4 py-3 mt-2">
+                <p className="text-[10px] text-spotify-green font-black uppercase tracking-widest mb-1">
+                  ✓ Cent Account Detected
+                </p>
+                <p className="text-[10px] text-white/50">
+                  100 {accountCurrency} = 1 {(CURRENCIES as any)[accountCurrency]?.parentCurrency}.
+                  Your P&L will be automatically converted to real currency values.
+                </p>
+              </div>
+            ) : accountCurrency !== 'USD' ? (
               <p className="text-[10px] text-spotify-green mt-1">
                 ✓ P&L will be saved in {accountCurrency} and auto-converted to your display currency
               </p>
-            )}
-          </div>
+            ) : null}
 
           <input 
             type="file" 

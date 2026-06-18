@@ -9,22 +9,29 @@ export const PAIR_CONFIG = {
 };
 
 export const CURRENCIES = {
-  USD: { symbol: '$',   code: 'USD', rate: 1       },
-  EUR: { symbol: '€',   code: 'EUR', rate: 0.93    },
-  GBP: { symbol: '£',   code: 'GBP', rate: 0.81    },
-  JPY: { symbol: '¥',   code: 'JPY', rate: 155.50  },
-  AUD: { symbol: 'A$',  code: 'AUD', rate: 1.54    },
-  CAD: { symbol: 'C$',  code: 'CAD', rate: 1.37    },
-  CHF: { symbol: 'CHf', code: 'CHF', rate: 0.91    },
-  CNY: { symbol: '¥',   code: 'CNY', rate: 7.23    },
-  INR: { symbol: '₹',   code: 'INR', rate: 83.50   },
-  IDR: { symbol: 'Rp',  code: 'IDR', rate: 16250   },
-  HKD: { symbol: 'HK$', code: 'HKD', rate: 7.82    },
-  SGD: { symbol: 'S$',  code: 'SGD', rate: 1.35    },
-  NZD: { symbol: 'NZ$', code: 'NZD', rate: 1.66    },
-  BRL: { symbol: 'R$',  code: 'BRL', rate: 5.12    },
-  SAR: { symbol: 'SR',  code: 'SAR', rate: 3.75    },
-  AED: { symbol: 'DH',  code: 'AED', rate: 3.67    },
+  // Standard currencies
+  USD: { symbol: '$',    code: 'USD', rate: 1,        name: 'US Dollar',        isCent: false },
+  EUR: { symbol: '€',    code: 'EUR', rate: 0.93,     name: 'Euro',             isCent: false },
+  GBP: { symbol: '£',    code: 'GBP', rate: 0.81,     name: 'British Pound',    isCent: false },
+  JPY: { symbol: '¥',    code: 'JPY', rate: 155.50,   name: 'Japanese Yen',     isCent: false },
+  AUD: { symbol: 'A$',   code: 'AUD', rate: 1.54,     name: 'Australian Dollar', isCent: false },
+  CAD: { symbol: 'C$',   code: 'CAD', rate: 1.37,     name: 'Canadian Dollar',  isCent: false },
+  CHF: { symbol: 'CHf',  code: 'CHF', rate: 0.91,     name: 'Swiss Franc',      isCent: false },
+  CNY: { symbol: '¥',    code: 'CNY', rate: 7.23,     name: 'Chinese Yuan',     isCent: false },
+  INR: { symbol: '₹',    code: 'INR', rate: 83.50,    name: 'Indian Rupee',     isCent: false },
+  IDR: { symbol: 'Rp',   code: 'IDR', rate: 16250,    name: 'Indonesian Rupiah', isCent: false },
+  HKD: { symbol: 'HK$',  code: 'HKD', rate: 7.82,     name: 'Hong Kong Dollar', isCent: false },
+  SGD: { symbol: 'S$',   code: 'SGD', rate: 1.35,     name: 'Singapore Dollar', isCent: false },
+  NZD: { symbol: 'NZ$',  code: 'NZD', rate: 1.66,     name: 'New Zealand Dollar', isCent: false },
+  BRL: { symbol: 'R$',   code: 'BRL', rate: 5.12,     name: 'Brazilian Real',   isCent: false },
+  SAR: { symbol: 'SR',   code: 'SAR', rate: 3.75,     name: 'Saudi Riyal',      isCent: false },
+  AED: { symbol: 'DH',   code: 'AED', rate: 3.67,     name: 'UAE Dirham',       isCent: false },
+
+  // Cent accounts — 1 cent = 0.01 of parent currency
+  USC: { symbol: '¢',    code: 'USC', rate: 100,      name: 'US Cents (Cent Account)',    isCent: true, parentCurrency: 'USD' },
+EUC: { symbol: 'c€',   code: 'EUC', rate: 93,       name: 'Euro Cents (Cent Account)',  isCent: true, parentCurrency: 'EUR' },
+GBC: { symbol: 'p',    code: 'GBC', rate: 81,       name: 'GBP Pence (Cent Account)',   isCent: true, parentCurrency: 'GBP' },
+IDC: { symbol: 'sen',  code: 'IDC', rate: 1625000,  name: 'IDR Cents (Cent Account)',   isCent: true, parentCurrency: 'IDR' },
 };
 
 // ── DST Helpers ───────────────────────────────────────────────────────────────
