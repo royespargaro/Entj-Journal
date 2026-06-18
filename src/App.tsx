@@ -2291,6 +2291,27 @@ If no anomaly: return exactly the word NULL`}]
 }
 
 // --- Page Components ---
+function CountUpNumber({ value, formatter, className }: { value: number; formatter: (v: number) => string; className?: string }) {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    let start: number | null = null;
+    const duration = 800;
+    const initial = display;
+    const delta = value - initial;
+
+    const step = (timestamp: number) => {
+      if (start === null) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      setDisplay(initial + delta * eased);
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [value]);
+
+  return <span className={className}>{formatter(display)}</span>;
+}
 
 function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActivePage, plan, dailyGoals, onShareTrade, setups, onToggleExecute, setClosingSetup, chartType, setChartType, openRules }: { stats: any, trades: any, onTradeClick: any, displayCurrency: any, setActivePage: any, plan: any, dailyGoals?: string, onShareTrade: (t: Trade) => void, setups: DailySetup[], onToggleExecute: (id: string, current: string) => void, setClosingSetup: (s: DailySetup) => void, chartType: 'Area' | 'Line' | 'Bar', setChartType: (c: 'Area' | 'Line' | 'Bar') => void, openRules: () => void }) {
   const { user, showToast } = useAuth();
@@ -2470,7 +2491,7 @@ const todayStats = useMemo(() => {
         <div>
           <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Discipline</p>
           <p className={`text-2xl font-black tracking-tighter ${(stats.behavioralDiscipline ?? 0) >= 80 ? 'text-spotify-green drop-shadow-[0_0_12px_rgba(29,185,84,0.4)]' : 'text-white'}`}>
-            {stats.behavioralDiscipline ?? 0}%
+            <CountUpNumber value={stats.behavioralDiscipline ?? 0} formatter={(v) => `${Math.round(v)}%`} />
           </p>
         </div>
         <div className="w-px h-8 bg-white/10" />
@@ -2514,7 +2535,10 @@ const todayStats = useMemo(() => {
           className={`font-black tracking-tighter mt-2 leading-none break-words ${stats.pnl >= 0 ? 'text-spotify-green drop-shadow-[0_0_16px_rgba(29,185,84,0.35)]' : 'text-red-500 drop-shadow-[0_0_16px_rgba(239,68,68,0.3)]'}`}
           style={{ fontSize: 'clamp(1.5rem, 7vw, 2.75rem)' }}
         >
-          {stats.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}
+          <CountUpNumber 
+            value={convertCurrency(stats.pnl, 'USD', displayCurrency)} 
+            formatter={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v, displayCurrency)}`}
+          />
         </p>
       </div>
 
@@ -2603,7 +2627,7 @@ const todayStats = useMemo(() => {
   </motion.div>
 )}
 
-<div>
+<div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl overflow-hidden">
       <KillZoneTicker />
       </div>
 
@@ -2632,8 +2656,9 @@ const todayStats = useMemo(() => {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between gap-4 px-6 py-4 bg-spotify-green/5 border border-spotify-green/10 rounded-2xl"
+          className="relative flex items-center justify-between gap-4 px-6 py-4 bg-gradient-to-r from-spotify-green/10 via-spotify-green/5 to-transparent border border-spotify-green/15 rounded-2xl shadow-[0_4px_20px_rgba(29,185,84,0.06)] overflow-hidden"
         >
+          <div className="absolute -right-8 -top-8 w-32 h-32 bg-spotify-green/10 rounded-full blur-[60px] pointer-events-none" />
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-spotify-green/20 flex items-center justify-center shrink-0">
               <Brain size={16} className="text-spotify-green" />
@@ -2677,8 +2702,10 @@ const todayStats = useMemo(() => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           onClick={() => setActivePage('daily-plan')}
-          className={`relative overflow-hidden p-8 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-6 group cursor-pointer transition-all border ${
-            dailyGoals ? 'bg-spotify-green/10 border-spotify-green/20 shadow-lg shadow-spotify-green/5' : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.04]'
+          className={`relative overflow-hidden p-8 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-6 group cursor-pointer transition-all duration-300 border ${
+            dailyGoals 
+              ? 'bg-gradient-to-br from-spotify-green/12 via-spotify-green/5 to-transparent border-spotify-green/25 shadow-[0_8px_30px_rgba(29,185,84,0.1)]' 
+              : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04] hover:border-white/10'
           }`}
         >
           {dailyGoals && (
@@ -2751,7 +2778,10 @@ const todayStats = useMemo(() => {
           <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-spotify-green/4 rounded-full blur-[100px] pointer-events-none" />
           <div className="flex flex-col gap-4 mb-8">
             <div className="flex items-center justify-between">
-              <h3 className="text-[10px] font-black uppercase tracking-0.3em text-spotify-muted">Equity Timeline</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-spotify-green/60" />
+                Equity Timeline
+              </h3>
               <select 
                 value={chartType} 
                 onChange={(e) => setChartType(e.target.value as 'Area' | 'Line' | 'Bar')}
@@ -3046,7 +3076,10 @@ const todayStats = useMemo(() => {
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white/[0.015] rounded-3xl p-8 border border-white/[0.04] transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Psychology</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-spotify-green/60" />
+              Psychology
+            </h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
             {stats.psychologyMap.length > 0 ? (() => {
@@ -3083,7 +3116,10 @@ const todayStats = useMemo(() => {
         <div className="space-y-6">
           <div className="bg-white/[0.025] rounded-3xl p-8 border border-white/[0.06] transition-all duration-300 hover:bg-white/[0.04] hover:border-white/[0.1]">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Timing</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-blue-400/60" />
+              Timing
+            </h3>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 bg-spotify-green rounded-full animate-pulse" />
                 <span className="text-[8px] font-black uppercase tracking-widest text-spotify-green">Live Monitoring</span>
@@ -3124,7 +3160,10 @@ const todayStats = useMemo(() => {
           <div className="bg-white/[0.015] rounded-3xl p-8 border border-white/[0.04] flex flex-col justify-between transition-all duration-300 hover:bg-white/[0.025] hover:border-white/[0.07]">
             <div className="space-y-8">
               <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Risk</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted flex items-center gap-2">
+                <span className="w-1 h-1 rounded-full bg-red-400/60" />
+                Risk
+              </h3>
               </div>
               
               <div className="space-y-6">
