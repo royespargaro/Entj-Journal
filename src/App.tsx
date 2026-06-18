@@ -115,7 +115,18 @@ import {
 } from 'firebase/firestore';
 import { getMessaging, getToken } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
+const generateTradeFingerprint = (t: any) => {
+  const date = t.date || '';
+  const time = (t.time || '').slice(0, 5);
+  const pair = (t.pair || '').toUpperCase().trim();
+  const dir = t.dir || '';
+  const entry = Number(t.entry || 0).toFixed(5);
+  const exit = Number(t.exit || 0).toFixed(5);
+  const pnl = Number(cleanMoney(t.pnl) || 0).toFixed(2);
+  return `${date}|${time}|${pair}|${dir}|${entry}|${exit}|${pnl}`;
+};
 
+const app = initializeApp(firebaseConfig);
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const messaging = getMessaging(app);
@@ -2136,6 +2147,7 @@ If no anomaly: return exactly the word NULL`}]
           onClose={() => setIsImportOpen(false)} 
           onImport={importTrades} 
           displayCurrency={displayCurrency}
+          existingTrades={trades}
         />
       )}
 
@@ -5232,7 +5244,7 @@ Note: ${notes}`
   );
 }
 
-function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () => void, onImport: (trades: any[]) => void, displayCurrency: string }) {
+function MT5ImportModal({ onClose, onImport, displayCurrency, existingTrades }: { onClose: () => void, onImport: (trades: any[]) => void, displayCurrency: string, existingTrades: any[] }) {
   const [importedData, setImportedData] = useState<any[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [isParsing, setIsParsing] = useState(false);
@@ -5247,8 +5259,22 @@ function MT5ImportModal({ onClose, onImport, displayCurrency }: { onClose: () =>
       setIsParsing(false);
       return;
     }
-    setImportedData(validTrades);
-    setSelectedIndices(validTrades.map((_, i) => i));
+
+    const existingFingerprints = new Set(existingTrades.map(generateTradeFingerprint));
+
+    const flagged = validTrades.map(t => ({
+      ...t,
+      __isDuplicate: existingFingerprints.has(generateTradeFingerprint(t))
+    }));
+
+    setImportedData(flagged);
+    // Auto-select only non-duplicates by default
+    setSelectedIndices(
+      flagged.reduce((acc: number[], t, i) => {
+        if (!t.__isDuplicate) acc.push(i);
+        return acc;
+      }, [])
+    );
     setIsParsing(false);
   };
 
@@ -5750,6 +5776,14 @@ currency: accountCurrency,
 
         {importedData.length > 0 && (
           <div className="space-y-4">
+            {importedData.some((t: any) => t.__isDuplicate) && (
+              <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex items-center gap-3">
+                <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+                <p className="text-xs font-bold text-amber-400">
+                  {importedData.filter((t: any) => t.__isDuplicate).length} duplicate trade{importedData.filter((t: any) => t.__isDuplicate).length !== 1 ? 's' : ''} detected and deselected — they already exist in your journal.
+                </p>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <h5 className="text-[10px] font-extrabold uppercase tracking-widest text-spotify-muted">
                 Extracted Trades ({selectedIndices.length}/{importedData.length})
@@ -5774,7 +5808,7 @@ currency: accountCurrency,
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {importedData.map((t, i) => (
-                    <tr key={i} className="hover:bg-white/5 transition-colors">
+                    <tr key={i} className={`hover:bg-white/5 transition-colors ${t.__isDuplicate ? 'opacity-50' : ''}`}>
                       <td className="p-3">
                         <input 
                           type="checkbox" 
@@ -5784,7 +5818,14 @@ currency: accountCurrency,
                         />
                       </td>
                       <td className="p-3 text-spotify-muted font-mono">{t.date}</td>
-                      <td className="p-3 font-bold">{t.pair} <span className="opacity-50 mx-1">|</span> {t.dir}</td>
+                      <td className="p-3 font-bold">
+                        {t.pair} <span className="opacity-50 mx-1">|</span> {t.dir}
+                        {t.__isDuplicate && (
+                          <span className="ml-2 text-[8px] font-black uppercase tracking-widest text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
+                            Duplicate
+                          </span>
+                        )}
+                      </td>
                       <td className={`p-3 text-right font-bold ${t.pnl > 0 ? 'text-spotify-green' : 'text-red-500'}`}>
                         {formatCurrency(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), displayCurrency)}
                       </td>
