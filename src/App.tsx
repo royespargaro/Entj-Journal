@@ -7389,37 +7389,52 @@ function CalendarPage({ trades, displayCurrency }: any) {
       )}
     </div>
   );
-}
-function AnalyticsPage({ trades, displayCurrency }: any) {
+}function AnalyticsPage({ trades, displayCurrency }: any) {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
+  const [whatIfFilter, setWhatIfFilter] = useState<{ type: string; value: string } | null>(null);
 
   const analyticsChartData = useMemo(() => {
     if (!trades || !trades.length) return null;
-    
+
     const sanitize = (val: number) => isNaN(val) || !isFinite(val) ? 0 : val;
-    
-    // Win rate by session
+    const toUsd = (t: any) => convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+
+    const tradesWithUsdPnl = trades.map((t: any) => ({ ...t, usdPnl: toUsd(t) }));
+
+    // Sessions
     const sessions = ['Asia', 'London', 'New York'];
     const sessionData = sessions.map(s => {
-      const ts = trades.filter((t: any) => t.session === s);
-      const wr = ts.length ? Math.round(ts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / ts.length * 100) : 0;
-      const usdPnl = ts.reduce((sum: number, t: any) => sum + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-      return { name: s, wr: sanitize(wr), pnl: sanitize(usdPnl), count: ts.length };
+      const ts = tradesWithUsdPnl.filter((t: any) => t.session === s);
+      const wins = ts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length;
+      const grossProfit = ts.filter((t: any) => t.usdPnl > 0).reduce((s: number, t: any) => s + t.usdPnl, 0);
+      const grossLoss = Math.abs(ts.filter((t: any) => t.usdPnl < 0).reduce((s: number, t: any) => s + t.usdPnl, 0));
+      const pf = sanitize(grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0);
+      return {
+        name: s,
+        wr: ts.length ? sanitize(Math.round(wins / ts.length * 100)) : 0,
+        pnl: sanitize(ts.reduce((sum: number, t: any) => sum + t.usdPnl, 0)),
+        count: ts.length,
+        pf: sanitize(parseFloat(pf.toFixed(2))),
+        pct: 0
+      };
     });
+    const totalPnl = tradesWithUsdPnl.reduce((s: number, t: any) => s + t.usdPnl, 0);
+    sessionData.forEach(s => { s.pct = totalPnl !== 0 ? Math.round((s.pnl / totalPnl) * 100) : 0; });
 
-    // Win rate by Direction
-    const shorts = trades.filter((t: any) => t.dir?.toLowerCase() === 'short');
-    const longs = trades.filter((t: any) => t.dir?.toLowerCase() === 'long');
-    const swr = shorts.length ? Math.round(shorts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / shorts.length * 100) : 0;
-    const lwr = longs.length ? Math.round(longs.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / longs.length * 100) : 0;
+    // Direction
+    const shorts = tradesWithUsdPnl.filter((t: any) => t.dir?.toLowerCase() === 'short');
+    const longs = tradesWithUsdPnl.filter((t: any) => t.dir?.toLowerCase() === 'long');
+    const swr = shorts.length ? sanitize(Math.round(shorts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / shorts.length * 100)) : 0;
+    const lwr = longs.length ? sanitize(Math.round(longs.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / longs.length * 100)) : 0;
+
     // Emotions
     const emotionsMap: any = {};
     trades.forEach((t: any) => {
-      const e = t.emotion.split('/')[0].trim();
+      const e = t.emotion?.split('/')[0].trim() || 'Unknown';
       if (!emotionsMap[e]) emotionsMap[e] = { win: 0, total: 0, pnl: 0 };
       emotionsMap[e].total++;
-      emotionsMap[e].pnl += convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+      emotionsMap[e].pnl += toUsd(t);
       if (t.result?.toUpperCase() === 'WIN') emotionsMap[e].win++;
     });
     const emotionData = Object.entries(emotionsMap).map(([name, data]: any) => ({
@@ -7429,76 +7444,71 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
       count: data.total
     })).sort((a, b) => b.pnl - a.pnl);
 
-    // Setup Performance
+    // Setups
     const setupsMap: any = {};
     trades.forEach((t: any) => {
       if (!t.setup) return;
       if (!setupsMap[t.setup]) setupsMap[t.setup] = { win: 0, total: 0, pnl: 0 };
       setupsMap[t.setup].total++;
-      setupsMap[t.setup].pnl += convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+      setupsMap[t.setup].pnl += toUsd(t);
       if (t.result?.toUpperCase() === 'WIN') setupsMap[t.setup].win++;
     });
     const setupPerformanceData = Object.entries(setupsMap).map(([name, data]: any) => ({
       name,
       wr: sanitize(Math.round(data.win / data.total * 100)),
       pnl: sanitize(data.pnl),
-      count: data.total
+      count: data.total,
+      pf: sanitize((() => {
+        const gp = (data as any).pnl > 0 ? (data as any).pnl : 0;
+        return gp;
+      })())
     })).sort((a, b) => b.pnl - a.pnl);
 
-    // Trend Breakdown by Session
-    const sortedTrades = [...trades].sort((a: any, b: any) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-    let sessionCurvesUsd: any = { 'Asia': 0, 'London': 0, 'New York': 0 };
-    const sessionTrendData = sortedTrades.map((t: any) => {
-      if (sessions.includes(t.session)) {
-        sessionCurvesUsd[t.session] += convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
-      }
-      return {
-        displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        Asia: sanitize(sessionCurvesUsd['Asia']),
-        London: sanitize(sessionCurvesUsd['London']),
-        'New York': sanitize(sessionCurvesUsd['New York'])
-      };
-    });
+    // Core metrics
+    const winTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl > 0);
+    const lossTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl < 0);
+    const grossProfit = winTrades.reduce((s: number, t: any) => s + t.usdPnl, 0);
+    const grossLoss = Math.abs(lossTrades.reduce((s: number, t: any) => s + t.usdPnl, 0));
+    const profitFactor = sanitize(grossLoss > 0 ? parseFloat((grossProfit / grossLoss).toFixed(2)) : grossProfit > 0 ? 999 : 0);
+    const avgWin = winTrades.length ? winTrades.reduce((s: number, t: any) => s + t.usdPnl, 0) / winTrades.length : 0;
+    const avgLoss = lossTrades.length ? Math.abs(lossTrades.reduce((s: number, t: any) => s + t.usdPnl, 0) / lossTrades.length) : 0;
+    const winRate = trades.length ? winTrades.length / trades.length : 0;
+    const expectancy = sanitize(parseFloat(((winRate * avgWin) - ((1 - winRate) * avgLoss)).toFixed(2)));
 
-    // Trend Breakdown by Setup (Top 5)
-    const topSetups = setupPerformanceData.slice(0, 5).map(s => s.name);
-    let setupCurvesUsd: any = {};
-    topSetups.forEach(s => setupCurvesUsd[s] = 0);
-    const setupTrendData = sortedTrades.map((t: any) => {
-      if (topSetups.includes(t.setup)) {
-        setupCurvesUsd[t.setup] += convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
-      }
-      return {
-        displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        ...Object.fromEntries(topSetups.map(s => [s, sanitize(setupCurvesUsd[s])]))
-      };
-    });
-
-    // Best and Worst Trades
-    const tradesWithUsdPnl = trades.map((t: any) => ({
-      ...t,
-      usdPnl: convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')
-    }));
-    const bestTrade = tradesWithUsdPnl.length > 0 ? tradesWithUsdPnl.reduce((max: any, t: any) => (t.usdPnl > max.usdPnl) ? t : max, tradesWithUsdPnl[0]) : null;
-    const worstTrade = tradesWithUsdPnl.length > 0 ? tradesWithUsdPnl.reduce((min: any, t: any) => (t.usdPnl < min.usdPnl) ? t : min, tradesWithUsdPnl[0]) : null;
-
-    // Average R:R
+    // RR
     const tradesWithRR = trades.filter((t: any) => {
-      const entry = cleanMoney(t.entry);
-      const exit = cleanMoney(t.exit);
-      const sl = cleanMoney(t.sl);
+      const entry = cleanMoney(t.entry), exit = cleanMoney(t.exit), sl = cleanMoney(t.sl);
       return entry > 0 && exit > 0 && sl > 0 && entry !== sl;
     }).map((t: any) => {
-      const entry = cleanMoney(t.entry);
-      const exit = cleanMoney(t.exit);
-      const sl = cleanMoney(t.sl);
-      const risk = Math.abs(entry - sl);
-      const reward = Math.abs(exit - entry);
-      return reward / risk;
+      const entry = cleanMoney(t.entry), exit = cleanMoney(t.exit), sl = cleanMoney(t.sl);
+      return Math.abs(exit - entry) / Math.abs(entry - sl);
     });
     const avgRR = tradesWithRR.length ? (tradesWithRR.reduce((a, b) => a + b, 0) / tradesWithRR.length).toFixed(2) : '0.00';
 
-    // News Impact
+    // Streaks
+    const sortedByDate = [...trades].sort((a: any, b: any) => a.date.localeCompare(b.date));
+    let maxConsecWins = 0, maxConsecLosses = 0, curWins = 0, curLosses = 0;
+    sortedByDate.forEach((t: any) => {
+      if (t.result?.toUpperCase() === 'WIN') { curWins++; curLosses = 0; maxConsecWins = Math.max(maxConsecWins, curWins); }
+      else if (t.result?.toUpperCase() === 'LOSS') { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
+      else { curWins = 0; curLosses = 0; }
+    });
+
+    // Best/worst
+    const bestTrade = tradesWithUsdPnl.length > 0 ? tradesWithUsdPnl.reduce((max: any, t: any) => t.usdPnl > max.usdPnl ? t : max, tradesWithUsdPnl[0]) : null;
+    const worstTrade = tradesWithUsdPnl.length > 0 ? tradesWithUsdPnl.reduce((min: any, t: any) => t.usdPnl < min.usdPnl ? t : min, tradesWithUsdPnl[0]) : null;
+
+    // Day of week
+    const dayMap: any = { 0: { name: 'Sun', pnl: 0, count: 0 }, 1: { name: 'Mon', pnl: 0, count: 0 }, 2: { name: 'Tue', pnl: 0, count: 0 }, 3: { name: 'Wed', pnl: 0, count: 0 }, 4: { name: 'Thu', pnl: 0, count: 0 }, 5: { name: 'Fri', pnl: 0, count: 0 }, 6: { name: 'Sat', pnl: 0, count: 0 } };
+    tradesWithUsdPnl.forEach((t: any) => {
+      const day = new Date(t.date).getDay();
+      if (dayMap[day]) { dayMap[day].pnl += t.usdPnl; dayMap[day].count++; }
+    });
+    const dayData = Object.values(dayMap) as any[];
+    const bestDay = dayData.reduce((best: any, d: any) => d.pnl > best.pnl ? d : best, dayData[0]);
+    const worstDay = dayData.reduce((worst: any, d: any) => d.pnl < worst.pnl ? d : worst, dayData[0]);
+
+    // News
     const newsImpactMap: any = { high: 0, med: 0, no: 0 };
     trades.forEach((t: any) => {
       const impact = t.news || 'no';
@@ -7511,459 +7521,651 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
       { name: 'No News', value: newsImpactMap.no }
     ];
 
-    // Profit Factor
-    const grossProfit = tradesWithUsdPnl.filter((t: any) => t.usdPnl > 0).reduce((sum: number, t: any) => sum + t.usdPnl, 0);
-    const grossLoss = Math.abs(tradesWithUsdPnl.filter((t: any) => t.usdPnl < 0).reduce((sum: number, t: any) => sum + t.usdPnl, 0));
-    const profitFactor = sanitize(grossLoss > 0 ? parseFloat((grossProfit / grossLoss).toFixed(2)) : grossProfit > 0 ? 999 : 0);
-
-    // Expectancy
-    const winTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl > 0);
-    const lossTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl < 0);
-    const avgWin = winTrades.length ? winTrades.reduce((s: number, t: any) => s + t.usdPnl, 0) / winTrades.length : 0;
-    const avgLoss = lossTrades.length ? Math.abs(lossTrades.reduce((s: number, t: any) => s + t.usdPnl, 0) / lossTrades.length) : 0;
-    const winRate = trades.length ? winTrades.length / trades.length : 0;
-    const expectancy = sanitize(parseFloat(((winRate * avgWin) - ((1 - winRate) * avgLoss)).toFixed(2)));
-
-    // Consecutive wins/losses
-    const sortedByDate = [...trades].sort((a: any, b: any) => a.date.localeCompare(b.date));
-    let maxConsecWins = 0, maxConsecLosses = 0, curWins = 0, curLosses = 0;
-    sortedByDate.forEach((t: any) => {
-      if (t.result?.toUpperCase() === 'WIN') { curWins++; curLosses = 0; maxConsecWins = Math.max(maxConsecWins, curWins); }
-      else if (t.result?.toUpperCase() === 'LOSS') { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
-      else { curWins = 0; curLosses = 0; }
+    // Trend data (compact — only last 30 points to avoid token bloat)
+    const sortedTrades = [...trades].sort((a: any, b: any) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
+    let sessionCurvesUsd: any = { 'Asia': 0, 'London': 0, 'New York': 0 };
+    const sessionTrendData = sortedTrades.map((t: any) => {
+      if (sessions.includes(t.session)) sessionCurvesUsd[t.session] += toUsd(t);
+      return { displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), Asia: sanitize(sessionCurvesUsd['Asia']), London: sanitize(sessionCurvesUsd['London']), 'New York': sanitize(sessionCurvesUsd['New York']) };
     });
 
-    // Average win vs average loss
-    const avgWinDisplay = sanitize(avgWin);
-    const avgLossDisplay = sanitize(avgLoss);
-
-    // Best day of week
-    const dayMap: any = { 0: { name: 'Sun', pnl: 0, count: 0 }, 1: { name: 'Mon', pnl: 0, count: 0 }, 2: { name: 'Tue', pnl: 0, count: 0 }, 3: { name: 'Wed', pnl: 0, count: 0 }, 4: { name: 'Thu', pnl: 0, count: 0 }, 5: { name: 'Fri', pnl: 0, count: 0 }, 6: { name: 'Sat', pnl: 0, count: 0 } };
-    tradesWithUsdPnl.forEach((t: any) => {
-      const day = new Date(t.date).getDay();
-      if (dayMap[day]) { dayMap[day].pnl += t.usdPnl; dayMap[day].count++; }
+    const topSetups = setupPerformanceData.slice(0, 5).map(s => s.name);
+    let setupCurvesUsd: any = {};
+    topSetups.forEach(s => setupCurvesUsd[s] = 0);
+    const setupTrendData = sortedTrades.map((t: any) => {
+      if (topSetups.includes(t.setup)) setupCurvesUsd[t.setup] += toUsd(t);
+      return { displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), ...Object.fromEntries(topSetups.map(s => [s, sanitize(setupCurvesUsd[s])])) };
     });
-    const dayData = Object.values(dayMap) as any[];
-    const bestDay = dayData.reduce((best: any, d: any) => d.pnl > best.pnl ? d : best, dayData[0]);
-    const worstDay = dayData.reduce((worst: any, d: any) => d.pnl < worst.pnl ? d : worst, dayData[0]);
 
-    return { 
-      sessionData, swr, lwr, emotionData, 
+    // Leaks — ranked by negative impact
+    const leaks: { label: string; impact: number; freq: number; type: string; value: string }[] = [];
+
+    // Leak: sessions with negative PnL
+    sessionData.filter(s => s.pnl < 0 && s.count >= 3).forEach(s => {
+      leaks.push({ label: `Trading ${s.name} session`, impact: s.pnl, freq: s.count, type: 'session', value: s.name });
+    });
+
+    // Leak: emotions with negative PnL
+    emotionData.filter(e => e.pnl < 0 && e.count >= 2).forEach(e => {
+      leaks.push({ label: `Trading while ${e.name.toLowerCase()}`, impact: e.pnl, freq: e.count, type: 'emotion', value: e.name });
+    });
+
+    // Leak: setups with negative PnL
+    setupPerformanceData.filter(s => s.pnl < 0 && s.count >= 2).forEach(s => {
+      leaks.push({ label: `Using ${s.name} setup`, impact: s.pnl, freq: s.count, type: 'setup', value: s.name });
+    });
+
+    // Leak: trading on losing days
+    dayData.filter(d => d.pnl < 0 && d.count >= 2).forEach(d => {
+      leaks.push({ label: `Trading on ${d.name}days`, impact: d.pnl, freq: d.count, type: 'day', value: d.name });
+    });
+
+    leaks.sort((a, b) => a.impact - b.impact);
+
+    // Edge — ranked by positive impact
+    const edges = [
+      ...sessionData.filter(s => s.pnl > 0 && s.count >= 3).map(s => ({ label: `${s.name} session`, impact: s.pnl, wr: s.wr, pf: s.pf, type: 'session', value: s.name })),
+      ...emotionData.filter(e => e.pnl > 0 && e.count >= 2).map(e => ({ label: `Trading while ${e.name.toLowerCase()}`, impact: e.pnl, wr: e.wr, pf: 0, type: 'emotion', value: e.name })),
+      ...setupPerformanceData.filter(s => s.pnl > 0 && s.count >= 2).map(s => ({ label: `${s.name} setup`, impact: s.pnl, wr: s.wr, pf: 0, type: 'setup', value: s.name })),
+    ].sort((a, b) => b.impact - a.impact);
+
+    // Performance score 
+    const disciplineScore = Math.min(100, Math.round(winRate * 100 * 0.4 + Math.min(profitFactor / 3, 1) * 100 * 0.4 + (expectancy > 0 ? 20 : 0)));
+
+    return {
+      sessionData, swr, lwr, emotionData,
       shortsCount: shorts.length, longsCount: longs.length,
       setupPerformanceData, sessionTrendData, setupTrendData,
       topSetups, bestTrade, worstTrade, avgRR, newsData,
       profitFactor, expectancy, maxConsecWins, maxConsecLosses,
-      avgWinDisplay, avgLossDisplay, bestDay, worstDay, dayData
+      avgWin, avgLoss, bestDay, worstDay, dayData,
+      leaks, edges, disciplineScore, totalPnl,
+      winRate: Math.round(winRate * 100),
+      tradesWithUsdPnl
     };
   }, [trades]);
 
-  if (!analyticsChartData) return <div className="p-20 text-center text-spotify-muted">No data for analytics yet. Log more trades.</div>;
+  // What If simulator — pure deterministic math
+  const whatIfResult = useMemo(() => {
+    if (!analyticsChartData || !whatIfFilter) return null;
+
+    const { type, value } = whatIfFilter;
+    const filtered = analyticsChartData.tradesWithUsdPnl.filter((t: any) => {
+      if (type === 'session') return t.session === value;
+      if (type === 'emotion') return (t.emotion?.split('/')[0].trim()) !== value;
+      if (type === 'setup') return t.setup !== value;
+      if (type === 'day') return new Date(t.date).toLocaleDateString('en-US', { weekday: 'short' }) !== value;
+      return true;
+    });
+
+    if (!filtered.length) return null;
+
+    const simPnl = filtered.reduce((s: number, t: any) => s + t.usdPnl, 0);
+    const simWins = filtered.filter((t: any) => t.usdPnl > 0);
+    const simLosses = filtered.filter((t: any) => t.usdPnl < 0);
+    const simGrossProfit = simWins.reduce((s: number, t: any) => s + t.usdPnl, 0);
+    const simGrossLoss = Math.abs(simLosses.reduce((s: number, t: any) => s + t.usdPnl, 0));
+    const simPf = simGrossLoss > 0 ? parseFloat((simGrossProfit / simGrossLoss).toFixed(2)) : simGrossProfit > 0 ? 999 : 0;
+    const simWr = filtered.length ? Math.round((simWins.length / filtered.length) * 100) : 0;
+
+    let peak = 0, maxDd = 0, running = 0;
+    filtered.forEach((t: any) => { running += t.usdPnl; if (running > peak) peak = running; const dd = peak - running; if (dd > maxDd) maxDd = dd; });
+
+    return {
+      label: type === 'session' ? `Only ${value} session` : type === 'emotion' ? `Excluding ${value} trades` : type === 'setup' ? `Only ${value} setup` : `Excluding ${value}days`,
+      simPnl, simPf, simWr, simTrades: filtered.length, maxDd
+    };
+  }, [analyticsChartData, whatIfFilter]);
+
+  if (!analyticsChartData) return (
+    <div className="flex flex-col items-center justify-center py-32 gap-4">
+      <BarChart3 size={48} className="text-white/10" />
+      <p className="text-sm font-black text-white/20 uppercase tracking-widest">No data yet — log trades to unlock analytics</p>
+    </div>
+  );
 
   const COLORS = ['#1DB954', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
+  const toDisp = (usd: number) => formatCurrency(convertCurrency(usd, 'USD', displayCurrency), displayCurrency);
 
   return (
-    <div className="space-y-8 md:space-y-12">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div className="space-y-8 pb-24">
+
+      {/* ── HEADER ── */}
+      <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter mb-1">Ana<span className="italic text-spotify-green">lytics</span></h1>
-          <p className="text-xs font-medium text-spotify-muted tracking-tight">Identify patterns in your psychology and technical execution.</p>
+          <p className="text-xs font-medium text-spotify-muted">Decision support — not just statistics.</p>
         </div>
-        <button
-            onClick={() => setIsChatModalOpen(true)}
-            className="px-4 py-2 bg-spotify-green text-black font-black text-xs rounded-full hover:opacity-90 transition-opacity"
-        >
-            Discuss with AI
-        </button>
-        <button
-            onClick={() => setIsInsightModalOpen(true)}
-            className="px-4 py-2 border border-spotify-green text-spotify-green font-black text-xs rounded-full hover:bg-spotify-green/10 transition-colors"
-        >
-            Get Top Insight
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setIsChatModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all">
+            <MessageCircle size={14} /> Discuss
+          </button>
+          <button onClick={() => setIsInsightModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-spotify-green text-black rounded-full text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all">
+            <Sparkles size={14} /> AI Mentor
+          </button>
+        </div>
       </div>
 
-      {isChatModalOpen && (
-        <AnalyticsChatModal
-            onClose={() => setIsChatModalOpen(false)}
-            context={analyticsChartData}
-        />
-      )}
-      {isInsightModalOpen && (
-        <PerformanceInsightModal
-            onClose={() => setIsInsightModalOpen(false)}
-            context={analyticsChartData}
-        />
-      )}
+      {isChatModalOpen && <AnalyticsChatModal onClose={() => setIsChatModalOpen(false)} context={analyticsChartData} />}
+      {isInsightModalOpen && <PerformanceInsightModal onClose={() => setIsInsightModalOpen(false)} context={analyticsChartData} />}
 
-      {/* Row 1 — existing stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Short Win Rate" value={`${analyticsChartData.swr}%`} sub={`${analyticsChartData.shortsCount} trades`} />
-        <StatCard label="Long Win Rate" value={`${analyticsChartData.lwr}%`} sub={`${analyticsChartData.longsCount} trades`} />
-        <StatCard label="Avg Risk:Reward" value={`1:${analyticsChartData.avgRR}`} sub="Target vs Risk" />
-        <StatCard 
-          label="Best Session" 
-          value={analyticsChartData.sessionData.length > 0 ? [...analyticsChartData.sessionData].sort((a:any, b:any) => b.wr - a.wr)[0].name : "None"} 
-          sub="Highest Win Rate" 
-        />
-      </div>
+      {/* ── LAYER 1: AM I MAKING MONEY? ── */}
+      <div className="relative overflow-hidden bg-white/[0.03] border border-white/10 rounded-3xl p-8 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-spotify-green/40 to-transparent" />
+        <div className="absolute -top-20 -right-20 w-64 h-64 bg-spotify-green/5 rounded-full blur-[80px] pointer-events-none" />
 
-      {/* Row 2 — new advanced metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard 
-          label="Profit Factor" 
-          value={analyticsChartData.profitFactor === 999 ? '∞' : analyticsChartData.profitFactor.toFixed(2)} 
-          sub={analyticsChartData.profitFactor >= 1.5 ? '✓ Positive edge' : analyticsChartData.profitFactor >= 1 ? 'Breakeven zone' : '✗ Negative edge'}
-          valueColor={analyticsChartData.profitFactor >= 1.5 ? 'text-spotify-green' : analyticsChartData.profitFactor >= 1 ? 'text-yellow-400' : 'text-red-500'}
-        />
-        <StatCard 
-          label="Expectancy" 
-          value={`${analyticsChartData.expectancy >= 0 ? '+' : ''}${formatCurrency(convertCurrency(analyticsChartData.expectancy, 'USD', displayCurrency), displayCurrency)}`}
-          sub="Per trade average"
-          valueColor={analyticsChartData.expectancy >= 0 ? 'text-spotify-green' : 'text-red-500'}
-        />
-        <StatCard 
-          label="Max Consec. Wins" 
-          value={analyticsChartData.maxConsecWins.toString()}
-          sub={`Max losses: ${analyticsChartData.maxConsecLosses}`}
-          valueColor="text-spotify-green"
-        />
-        <StatCard 
-          label="Avg Win / Loss" 
-          value={`${formatCurrency(convertCurrency(analyticsChartData.avgWinDisplay, 'USD', displayCurrency), displayCurrency)}`}
-          sub={`Avg loss: ${formatCurrency(convertCurrency(analyticsChartData.avgLossDisplay, 'USD', displayCurrency), displayCurrency)}`}
-          valueColor="text-spotify-green"
-        />
-      </div>
-
-      {/* Day of Week Performance */}
-      <div className="bg-spotify-card p-6 md:p-8 rounded-2xl border border-white/5">
-        <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-6">Day of Week Performance</h3>
-        <div className="grid grid-cols-7 gap-2">
-          {analyticsChartData.dayData.map((d: any) => {
-            const isPositive = d.pnl >= 0;
-            const isBest = d.name === analyticsChartData.bestDay.name;
-            const isWorst = d.name === analyticsChartData.worstDay.name && d.pnl < 0;
-            return (
-              <div key={d.name} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                isBest ? 'bg-spotify-green/10 border-spotify-green/20' :
-                isWorst ? 'bg-red-500/10 border-red-500/20' :
-                'bg-white/[0.02] border-white/5'
-              }`}>
-                <p className="text-[9px] font-black uppercase tracking-widest text-white/40">{d.name}</p>
-                <p className={`text-xs font-black ${isPositive ? 'text-spotify-green' : 'text-red-400'}`}>
-                  {d.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(d.pnl, 'USD', displayCurrency), displayCurrency)}
-                </p>
-                <p className="text-[8px] text-white/20">{d.count}T</p>
-                {isBest && <span className="text-[7px] text-spotify-green font-black uppercase tracking-widest">Best</span>}
-                {isWorst && <span className="text-[7px] text-red-400 font-black uppercase tracking-widest">Avoid</span>}
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center gap-8">
+          {/* Score */}
+          <div className="flex flex-col items-center justify-center min-w-[140px] text-center">
+            <div className="relative w-28 h-28">
+              <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="10" />
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#1DB954" strokeWidth="10"
+                  strokeDasharray={`${(analyticsChartData.disciplineScore / 100) * 314} 314`}
+                  strokeLinecap="round"
+                  style={{ filter: 'drop-shadow(0 0 6px rgba(29,185,84,0.5))' }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-2xl font-black text-white">{analyticsChartData.disciplineScore}</p>
+                <p className="text-[8px] font-black text-spotify-muted uppercase tracking-widest">/100</p>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-spotify-green/10 border border-spotify-green/20 p-6 rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase text-spotify-green tracking-[0.2em] mb-1">Best Winning Trade</p>
-            <p className="text-3xl font-black text-white">{formatCurrency(convertCurrency(analyticsChartData.bestTrade?.usdPnl || 0, 'USD', displayCurrency), displayCurrency)}</p>
-            <p className="text-[10px] font-bold text-spotify-muted mt-1 uppercase tracking-widest">
-              {analyticsChartData.bestTrade ? `${analyticsChartData.bestTrade.pair} • ${analyticsChartData.bestTrade.date}` : 'No trades yet'}
-            </p>
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mt-2">Edge Score</p>
           </div>
-          <div className="bg-spotify-green p-3 rounded-full text-black">
-            <TrendingUp size={24} />
-          </div>
-        </div>
-        <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase text-red-500 tracking-[0.2em] mb-1">Worst Losing Trade</p>
-            <p className="text-3xl font-black text-white">{formatCurrency(convertCurrency(analyticsChartData.worstTrade?.usdPnl || 0, 'USD', displayCurrency), displayCurrency)}</p>
-            <p className="text-[10px] font-bold text-spotify-muted mt-1 uppercase tracking-widest">
-              {analyticsChartData.worstTrade ? `${analyticsChartData.worstTrade.pair} • ${analyticsChartData.worstTrade.date}` : 'No trades yet'}
-            </p>
-          </div>
-          <div className="bg-red-500 p-3 rounded-full text-white">
-            <TrendingDown size={24} />
-          </div>
-        </div>
-      </div>
 
-       {/* Psychology Heatmap */}
-<div className="bg-spotify-card p-5 md:p-8 rounded-2xl border border-white/5">
-  <div className="mb-8">
-    <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-1">Psychology Heatmap</h3>
-    <p className="text-sm font-bold text-white/60">P&L intensity across emotions & sessions</p>
-  </div>
-  <div className="w-full overflow-x-auto">
-    {(() => {
-      const sessions = ['Asia', 'London', 'New York'];
-      const emotions = [...new Set(trades.map((t: any) => t.emotion?.split('/')[0].trim()).filter(Boolean))];
-      
-      // Build emotion x session matrix
-      const matrix: any = {};
-      emotions.forEach(e => {
-        matrix[e] = {};
-        sessions.forEach(s => {
-          matrix[e][s] = { pnl: 0, count: 0, wins: 0 };
-        });
-      });
-      
-      trades.forEach((t: any) => {
-        const e = t.emotion?.split('/')[0].trim();
-        const s = t.session;
-        if (matrix[e] && matrix[e][s] !== undefined) {
-          const pnl = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
-          matrix[e][s].pnl += pnl;
-          matrix[e][s].count++;
-          if (t.result?.toUpperCase() === 'WIN') matrix[e][s].wins++;
-        }
-      });
+          <div className="w-px h-20 bg-white/10 hidden lg:block" />
 
-      // Find min/max for color scaling
-      const allPnls = emotions.flatMap(e => sessions.map(s => matrix[e][s].pnl));
-      const maxPnl = Math.max(...allPnls, 1);
-      const minPnl = Math.min(...allPnls, -1);
-
-      const getColor = (pnl: number, count: number) => {
-        if (count === 0) return 'rgba(255,255,255,0.03)';
-        if (pnl > 0) {
-          const intensity = Math.min(pnl / maxPnl, 1);
-          const g = Math.round(100 + intensity * 155);
-          return `rgba(29, ${g}, 84, ${0.3 + intensity * 0.7})`;
-        } else {
-          const intensity = Math.min(Math.abs(pnl) / Math.abs(minPnl), 1);
-          const r = Math.round(150 + intensity * 105);
-          return `rgba(${r}, 30, 30, ${0.3 + intensity * 0.7})`;
-        }
-      };
-
-      const getTextColor = (pnl: number, count: number) => {
-        if (count === 0) return 'rgba(255,255,255,0.15)';
-        return pnl >= 0 ? '#1DB954' : '#ff4444';
-      };
-
-      return (
-        <div className="space-y-3">
-          {/* Session headers */}
-          <div className="grid gap-2" style={{ gridTemplateColumns: `140px repeat(${sessions.length}, 1fr)` }}>
-            <div />
-            {sessions.map(s => (
-              <div key={s} className="text-center text-[10px] font-black uppercase tracking-widest text-white/40 pb-1">
-                {s}
+          {/* Core metrics grid */}
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Net P&L', value: toDisp(analyticsChartData.totalPnl), color: analyticsChartData.totalPnl >= 0 ? 'text-spotify-green' : 'text-red-500', prefix: analyticsChartData.totalPnl >= 0 ? '+' : '' },
+              { label: 'Profit Factor', value: analyticsChartData.profitFactor === 999 ? '∞' : analyticsChartData.profitFactor.toFixed(2), color: analyticsChartData.profitFactor >= 1.5 ? 'text-spotify-green' : analyticsChartData.profitFactor >= 1 ? 'text-yellow-400' : 'text-red-500', prefix: '' },
+              { label: 'Expectancy', value: toDisp(analyticsChartData.expectancy), color: analyticsChartData.expectancy >= 0 ? 'text-spotify-green' : 'text-red-500', prefix: analyticsChartData.expectancy >= 0 ? '+' : '' },
+              { label: 'Win Rate', value: `${analyticsChartData.winRate}%`, color: analyticsChartData.winRate >= 50 ? 'text-spotify-green' : 'text-red-500', prefix: '' },
+            ].map(m => (
+              <div key={m.label} className="bg-black/20 rounded-2xl p-4 border border-white/5">
+                <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">{m.label}</p>
+                <p className={`text-xl font-black tracking-tighter ${m.color}`}>{m.prefix}{m.value}</p>
               </div>
             ))}
           </div>
 
-          {/* Heatmap rows */}
-          {emotions.map(emotion => (
-            <div key={emotion} className="grid gap-2 items-center" style={{ gridTemplateColumns: `140px repeat(${sessions.length}, 1fr)` }}>
-              <div className="text-[11px] font-black text-white/60 uppercase tracking-wider truncate pr-2">
-                {emotion}
+          <div className="w-px h-20 bg-white/10 hidden lg:block" />
+
+          {/* Status checks */}
+          <div className="space-y-2 min-w-[160px]">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-3">Status</p>
+            {[
+              { check: analyticsChartData.totalPnl > 0, label: 'Profitable' },
+              { check: analyticsChartData.profitFactor >= 1.5, label: 'Positive Edge' },
+              { check: analyticsChartData.expectancy > 0, label: 'Positive Expectancy' },
+              { check: analyticsChartData.winRate >= 50, label: 'Win Rate >50%' },
+              { check: analyticsChartData.leaks.length === 0, label: 'No Major Leaks' },
+            ].map(s => (
+              <div key={s.label} className="flex items-center gap-2">
+                <span className={`text-sm ${s.check ? 'text-spotify-green' : 'text-red-400'}`}>{s.check ? '✓' : '⚠'}</span>
+                <span className={`text-[11px] font-bold ${s.check ? 'text-white/60' : 'text-white/40'}`}>{s.label}</span>
               </div>
-              {sessions.map(session => {
-                const cell = matrix[emotion][session];
-                const wr = cell.count > 0 ? Math.round(cell.wins / cell.count * 100) : 0;
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── LAYER 2: WHERE DO I MAKE MONEY? ── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="w-6 h-6 rounded-full bg-spotify-green/20 flex items-center justify-center text-[10px] font-black text-spotify-green">2</span>
+          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white">Where Do I Make Money?</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Sessions ranked */}
+          <div className="lg:col-span-2 bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4 flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-blue-400/60" /> Session Breakdown
+            </h3>
+            <div className="space-y-1 mb-4">
+              <div className="grid grid-cols-5 gap-2 px-2 pb-2 border-b border-white/5">
+                {['Session', 'P&L', 'PF', 'WR', 'Trades'].map(h => (
+                  <p key={h} className="text-[8px] font-black uppercase tracking-widest text-white/30">{h}</p>
+                ))}
+              </div>
+              {[...analyticsChartData.sessionData].sort((a, b) => b.pnl - a.pnl).map((s, i) => (
+                <div key={s.name} className={`grid grid-cols-5 gap-2 px-2 py-3 rounded-xl transition-all ${i === 0 && s.pnl > 0 ? 'bg-spotify-green/5 border border-spotify-green/10' : 'hover:bg-white/[0.02]'}`}>
+                  <p className="text-xs font-black text-white">{s.name}</p>
+                  <p className={`text-xs font-black font-mono ${s.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                    {s.pnl >= 0 ? '+' : ''}{toDisp(s.pnl)}
+                  </p>
+                  <p className={`text-xs font-black ${s.pf >= 1.5 ? 'text-spotify-green' : s.pf >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
+                    {s.pf === 999 ? '∞' : s.pf.toFixed(2)}
+                  </p>
+                  <p className="text-xs font-bold text-white/60">{s.wr}%</p>
+                  <p className="text-xs font-bold text-white/40">{s.count}</p>
+                </div>
+              ))}
+            </div>
+            {(() => {
+              const best = [...analyticsChartData.sessionData].sort((a, b) => b.pnl - a.pnl)[0];
+              if (!best || best.pnl <= 0) return null;
+              return (
+                <div className="bg-spotify-green/10 border border-spotify-green/20 rounded-xl p-3">
+                  <p className="text-[11px] font-bold text-spotify-green">
+                    📊 {Math.abs(best.pct)}% of your profits come from {best.name} — this is your primary edge session.
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Setup rankings */}
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4 flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-spotify-green/60" /> Top Setups
+            </h3>
+            <div className="space-y-3">
+              {analyticsChartData.setupPerformanceData.slice(0, 5).map((s, i) => (
+                <div key={s.name} className="flex items-center gap-3">
+                  <span className={`text-[10px] font-black w-5 text-center ${i === 0 ? 'text-spotify-green' : 'text-white/20'}`}>#{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black text-white truncate">{s.name}</p>
+                    <p className="text-[9px] text-white/30">{s.count}T · {s.wr}% WR</p>
+                  </div>
+                  <p className={`text-[11px] font-black font-mono ${s.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                    {s.pnl >= 0 ? '+' : ''}{toDisp(s.pnl)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Day of week + Direction */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4">Day of Week</h3>
+            <div className="grid grid-cols-7 gap-1">
+              {analyticsChartData.dayData.map((d: any) => {
+                const isBest = d.name === analyticsChartData.bestDay.name && d.pnl > 0;
+                const isWorst = d.name === analyticsChartData.worstDay.name && d.pnl < 0;
                 return (
-                  <div
-                    key={session}
-                    className="relative rounded-xl p-3 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 cursor-default"
-                    style={{ 
-                      backgroundColor: getColor(cell.pnl, cell.count),
-                      minHeight: '100px',
-                      border: '1px solid rgba(255,255,255,0.05)'
-                    }}
-                    title={`${emotion} / ${session}: ${cell.count} trades, $${cell.pnl.toFixed(2)} P&L, ${wr}% WR`}
-                  >
-                    {cell.count === 0 ? (
-                      <span className="text-[10px] text-white/15 font-bold">—</span>
-                    ) : (
-                      <>
-                        <span className="text-sm font-black" style={{ color: getTextColor(cell.pnl, cell.count) }}>
-                          {cell.pnl >= 0 ? '+' : ''}{cell.pnl.toFixed(0)}$
-                        </span>
-                        <span className="text-[10px] text-white font-bold">{wr}% WR</span>
-                        <span className="text-[10px] text-white/60 font-bold">{cell.count}T</span>
-                      </>
-                    )}
+                  <div key={d.name} className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border text-center ${isBest ? 'bg-spotify-green/10 border-spotify-green/20' : isWorst ? 'bg-red-500/10 border-red-500/20' : 'bg-white/[0.02] border-white/5'}`}>
+                    <p className="text-[8px] font-black uppercase text-white/30">{d.name}</p>
+                    <p className={`text-[10px] font-black ${d.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {d.pnl >= 0 ? '+' : ''}{toDisp(d.pnl)}
+                    </p>
+                    <p className="text-[8px] text-white/20">{d.count}T</p>
+                    {isBest && <span className="text-[7px] text-spotify-green font-black">BEST</span>}
+                    {isWorst && <span className="text-[7px] text-red-400 font-black">AVOID</span>}
                   </div>
                 );
               })}
             </div>
-          ))}
+          </div>
 
-          {/* Legend */}
-          <div className="flex items-center justify-end gap-3 pt-4">
-            <span className="text-[9px] text-white/30 uppercase tracking-widest">Loss</span>
-            <div className="flex gap-0.5">
-              {[-1, -0.6, -0.3, 0.3, 0.6, 1].map((v, i) => (
-                <div
-                  key={i}
-                  className="w-6 h-3 rounded-sm"
-                  style={{ backgroundColor: getColor(v * (v < 0 ? Math.abs(minPnl) : maxPnl), 1) }}
-                />
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4">Direction Edge</h3>
+            <div className="space-y-4">
+              {[
+                { label: 'Long', wr: analyticsChartData.lwr, count: analyticsChartData.longsCount, color: 'bg-spotify-green' },
+                { label: 'Short', wr: analyticsChartData.swr, count: analyticsChartData.shortsCount, color: 'bg-red-400' },
+              ].map(d => (
+                <div key={d.label} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs font-black text-white">↑ {d.label}</p>
+                    <p className="text-xs font-black text-white">{d.wr}% WR · {d.count} trades</p>
+                  </div>
+                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${d.wr}%` }} transition={{ duration: 1 }} className={`h-full rounded-full ${d.color}`} />
+                  </div>
+                </div>
               ))}
-            </div>
-            <span className="text-[9px] text-white/30 uppercase tracking-widest">Profit</span>
-          </div>
-        </div>
-      );
-    })()}
-  </div>
-</div>
-      
-      {/* Equity Curves Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Session Trend */}
-        <div className="bg-spotify-card p-5 md:p-8 rounded-2xl border border-white/5">
-          <div className="mb-8">
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-1">Session Equity Curves</h3>
-            <p className="text-sm font-bold text-white/60">P&L progress by trading window</p>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analyticsChartData.sessionTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis 
-                  dataKey="displayDate" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 700 }}
-                  minTickGap={30}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 700 }}
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#121212', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '11px' }}
-                  itemStyle={{ fontSize: '11px', fontWeight: 700 }}
-                />
-                <Line type="monotone" dataKey="London" stroke="#1DB954" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="New York" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Asia" stroke="#6b7280" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex justify-center gap-6 mt-4">
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#1DB954]" /><span className="text-[10px] font-bold text-spotify-muted">London</span></div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#3b82f6]" /><span className="text-[10px] font-bold text-spotify-muted">New York</span></div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#6b7280]" /><span className="text-[10px] font-bold text-spotify-muted">Asia</span></div>
-          </div>
-        </div>
-
-        {/* Setup Trend */}
-        <div className="bg-spotify-card p-5 md:p-8 rounded-2xl border border-white/5">
-          <div className="mb-8">
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-1">Setup Equity Curves</h3>
-            <p className="text-sm font-bold text-white/60">Performance trend of top 5 setups</p>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analyticsChartData.setupTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis 
-                  dataKey="displayDate" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 700 }}
-                  minTickGap={30}
-                />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 700 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '11px' }} />
-                {analyticsChartData.topSetups.map((setup, i) => (
-                  <Line key={setup} type="monotone" dataKey={setup} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex flex-wrap justify-center gap-4 mt-4">
-            {analyticsChartData.topSetups.map((setup, i) => (
-              <div key={setup} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                <span className="text-[10px] font-bold text-spotify-muted truncate max-w-[80px]">{setup}</span>
+              <div className="pt-3 border-t border-white/5">
+                <p className="text-[11px] font-bold text-white/50">
+                  {analyticsChartData.lwr > analyticsChartData.swr
+                    ? `↑ You perform ${analyticsChartData.lwr - analyticsChartData.swr}% better on longs — prioritize buy setups.`
+                    : analyticsChartData.swr > analyticsChartData.lwr
+                    ? `↓ You perform ${analyticsChartData.swr - analyticsChartData.lwr}% better on shorts — prioritize sell setups.`
+                    : 'Balanced performance on both directions.'}
+                </p>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-spotify-card p-8 rounded-2xl">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-8 text-center">Session Efficiency</h3>
-          <div className="space-y-10">
-            {analyticsChartData.sessionData.map(s => (
-              <div key={s.name} className="space-y-3">
-                <div className="flex items-end justify-between font-bold">
-                  <span className="text-sm tracking-tight capitalize">{s.name}</span>
-                  <span className="text-xl tracking-tighter font-extrabold">{s.wr}% WR</span>
+      {/* ── LAYER 3: WHY DO I LOSE? ── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center text-[10px] font-black text-red-400">3</span>
+          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white">Why Do I Lose Money?</h2>
+        </div>
+
+        {analyticsChartData.leaks.length === 0 ? (
+          <div className="bg-spotify-green/10 border border-spotify-green/20 rounded-3xl p-8 text-center">
+            <p className="text-2xl mb-2">🎯</p>
+            <p className="text-sm font-black text-spotify-green">No significant leaks detected</p>
+            <p className="text-xs text-white/40 mt-1">Every measurable category has positive expectancy — keep going</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {analyticsChartData.leaks.slice(0, 4).map((leak, i) => (
+              <div key={leak.label} className={`relative bg-white/[0.015] border rounded-3xl p-6 overflow-hidden ${i === 0 ? 'border-red-500/30 bg-red-500/5' : 'border-white/[0.06]'}`}>
+                {i === 0 && <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/40 to-transparent" />}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      {i === 0 && <span className="text-[8px] font-black uppercase tracking-widest text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">Biggest Leak</span>}
+                      {i === 1 && <span className="text-[8px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">#{i + 1} Leak</span>}
+                      {i > 1 && <span className="text-[8px] font-black uppercase tracking-widest text-white/30 bg-white/5 px-2 py-0.5 rounded-full">#{i + 1}</span>}
+                    </div>
+                    <p className="text-sm font-black text-white capitalize">{leak.label}</p>
+                    <p className="text-[10px] text-white/40 mt-1">{leak.freq} occurrences</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xl font-black text-red-400">{toDisp(leak.impact)}</p>
+                    <p className="text-[9px] text-white/30 uppercase tracking-widest">impact</p>
+                  </div>
                 </div>
-                <div className="h-6 w-full bg-white/5 rounded-full overflow-hidden p-1">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${s.wr}%` }}
-                    transition={{ duration: 1, ease: "easeOut" }}
-                    className={`h-full rounded-full ${s.pnl >= 0 ? 'bg-spotify-green' : 'bg-red-500'}`}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] font-extrabold uppercase text-spotify-muted tracking-widest">
-                  <span>{s.count} trades</span>
-                  <div className={s.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}>{s.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(s.pnl, 'USD', displayCurrency), displayCurrency)} Profit</div>
-                </div>
+                <button
+                  onClick={() => setWhatIfFilter(whatIfFilter?.value === leak.value ? null : { type: leak.type, value: leak.value })}
+                  className={`mt-4 w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${
+                    whatIfFilter?.value === leak.value
+                      ? 'bg-spotify-green/20 border-spotify-green text-spotify-green'
+                      : 'bg-white/5 border-white/10 text-white/40 hover:text-white hover:border-white/20'
+                  }`}
+                >
+                  {whatIfFilter?.value === leak.value ? '✓ Simulating...' : '→ What If I Fixed This?'}
+                </button>
               </div>
             ))}
           </div>
+        )}
+
+        {/* Emotion breakdown */}
+        <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4">Emotion → P&L Impact</h3>
+          <div className="space-y-3">
+            {analyticsChartData.emotionData.map((e, i) => {
+              const maxAbs = Math.max(...analyticsChartData.emotionData.map((x: any) => Math.abs(x.pnl)), 1);
+              const barPct = Math.min(100, (Math.abs(e.pnl) / maxAbs) * 100);
+              const isPos = e.pnl >= 0;
+              return (
+                <div key={e.name} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-white">{e.name}</span>
+                      <span className="text-[9px] text-white/30">{e.count}T · {e.wr}% WR</span>
+                    </div>
+                    <span className={`text-xs font-black font-mono ${isPos ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {isPos ? '+' : ''}{toDisp(e.pnl)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${isPos ? 'bg-spotify-green' : 'bg-red-500'}`} style={{ width: `${barPct}%`, opacity: 0.6 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="bg-spotify-card p-8 rounded-2xl flex flex-col">
-           <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-8 text-center">Setup Rankings</h3>
-           <div className="flex-1 space-y-4">
-              {analyticsChartData.setupPerformanceData.slice(0, 4).map((s, idx) => (
-                <div key={s.name} className="flex items-center gap-4 bg-white/5 p-4 rounded-xl border border-white/5 hover:border-white/10 transition-all group">
-                   <div className="w-10 h-10 rounded-full bg-spotify-black flex items-center justify-center text-spotify-green font-black text-xs">
-                      #{idx + 1}
-                   </div>
-                   <div className="flex-1">
-                      <p className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted group-hover:text-white transition-colors">{s.name}</p>
-                      <p className="text-[10px] font-bold text-white/40">{s.count} trades · {s.wr}% Win Rate</p>
-                   </div>
-                   <div className="text-right">
-                      <p className={`text-lg font-black tracking-tighter ${s.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-                        {s.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(s.pnl, 'USD', displayCurrency), displayCurrency)}
-                      </p>
-                   </div>
+        {/* Psychology heatmap */}
+        <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-1">Psychology Heatmap</h3>
+          <p className="text-[11px] text-white/40 mb-6">P&L intensity across emotions × sessions</p>
+          <div className="w-full overflow-x-auto">
+            {(() => {
+              const sessions = ['Asia', 'London', 'New York'];
+              const emotions = [...new Set(trades.map((t: any) => t.emotion?.split('/')[0].trim()).filter(Boolean))] as string[];
+              const matrix: any = {};
+              emotions.forEach(e => { matrix[e] = {}; sessions.forEach(s => { matrix[e][s] = { pnl: 0, count: 0, wins: 0 }; }); });
+              trades.forEach((t: any) => {
+                const e = t.emotion?.split('/')[0].trim();
+                const s = t.session;
+                if (matrix[e] && matrix[e][s] !== undefined) {
+                  const pnl = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+                  matrix[e][s].pnl += pnl; matrix[e][s].count++;
+                  if (t.result?.toUpperCase() === 'WIN') matrix[e][s].wins++;
+                }
+              });
+              const allPnls = emotions.flatMap(e => sessions.map(s => matrix[e][s].pnl));
+              const maxPnl = Math.max(...allPnls, 1);
+              const minPnl = Math.min(...allPnls, -1);
+              const getColor = (pnl: number, count: number) => {
+                if (count === 0) return 'rgba(255,255,255,0.03)';
+                if (pnl > 0) { const intensity = Math.min(pnl / maxPnl, 1); return `rgba(29, ${Math.round(100 + intensity * 155)}, 84, ${0.3 + intensity * 0.7})`; }
+                else { const intensity = Math.min(Math.abs(pnl) / Math.abs(minPnl), 1); return `rgba(${Math.round(150 + intensity * 105)}, 30, 30, ${0.3 + intensity * 0.7})`; }
+              };
+              return (
+                <div className="space-y-2">
+                  <div className="grid gap-2" style={{ gridTemplateColumns: `130px repeat(3, 1fr)` }}>
+                    <div />
+                    {sessions.map(s => <div key={s} className="text-center text-[9px] font-black uppercase tracking-widest text-white/30">{s}</div>)}
+                  </div>
+                  {emotions.map(emotion => (
+                    <div key={emotion} className="grid gap-2 items-center" style={{ gridTemplateColumns: `130px repeat(3, 1fr)` }}>
+                      <div className="text-[10px] font-black text-white/50 truncate pr-2">{emotion}</div>
+                      {sessions.map(session => {
+                        const cell = matrix[emotion][session];
+                        const wr = cell.count > 0 ? Math.round(cell.wins / cell.count * 100) : 0;
+                        return (
+                          <div key={session} className="rounded-xl p-3 flex flex-col items-center justify-center gap-1 hover:scale-105 transition-all" style={{ backgroundColor: getColor(cell.pnl, cell.count), minHeight: '80px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            {cell.count === 0 ? <span className="text-[9px] text-white/15">—</span> : (
+                              <>
+                                <span className="text-xs font-black" style={{ color: cell.pnl >= 0 ? '#1DB954' : '#ff4444' }}>{cell.pnl >= 0 ? '+' : ''}{cell.pnl.toFixed(0)}$</span>
+                                <span className="text-[9px] text-white font-bold">{wr}%</span>
+                                <span className="text-[8px] text-white/50">{cell.count}T</span>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* ── WHAT IF SIMULATOR ── */}
+      {whatIfResult && (
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative bg-gradient-to-br from-spotify-green/10 via-spotify-green/5 to-transparent border border-spotify-green/25 rounded-3xl p-8 overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-spotify-green/50 to-transparent" />
+          <div className="absolute -right-16 -top-16 w-48 h-48 bg-spotify-green/10 rounded-full blur-[80px] pointer-events-none" />
+
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-spotify-green mb-1">What If Simulator</p>
+                <h3 className="text-lg font-black text-white">{whatIfResult.label}</h3>
+              </div>
+              <button onClick={() => setWhatIfFilter(null)} className="p-2 text-white/30 hover:text-white transition-colors"><X size={16} /></button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {[
+                { label: 'Actual P&L', value: toDisp(analyticsChartData.totalPnl), color: analyticsChartData.totalPnl >= 0 ? 'text-spotify-green' : 'text-red-400', sub: 'Current' },
+                { label: 'Simulated P&L', value: toDisp(whatIfResult.simPnl), color: whatIfResult.simPnl >= analyticsChartData.totalPnl ? 'text-spotify-green' : 'text-red-400', sub: 'Projected' },
+                { label: 'Profit Factor', value: `${analyticsChartData.profitFactor.toFixed(2)} → ${whatIfResult.simPf === 999 ? '∞' : whatIfResult.simPf.toFixed(2)}`, color: whatIfResult.simPf > analyticsChartData.profitFactor ? 'text-spotify-green' : 'text-red-400', sub: 'Change' },
+                { label: 'Win Rate', value: `${analyticsChartData.winRate}% → ${whatIfResult.simWr}%`, color: whatIfResult.simWr > analyticsChartData.winRate ? 'text-spotify-green' : 'text-red-400', sub: 'Change' },
+                { label: 'Trade Count', value: `${trades.length} → ${whatIfResult.simTrades}`, color: 'text-white', sub: 'Filtered' },
+              ].map(m => (
+                <div key={m.label} className="bg-black/20 rounded-2xl p-4 border border-white/5">
+                  <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">{m.label}</p>
+                  <p className={`text-sm font-black ${m.color} leading-tight`}>{m.value}</p>
+                  <p className="text-[8px] text-white/20 mt-1 uppercase tracking-widest">{m.sub}</p>
                 </div>
               ))}
-           </div>
-           <div className="mt-8 bg-white/5 p-8 rounded-xl text-center">
-              <h4 className="text-[10px] font-extrabold text-spotify-muted uppercase tracking-widest mb-6">News Impact Breakdown</h4>
-              <div className="grid grid-cols-3 gap-4">
-                {analyticsChartData.newsData.map((n: any) => (
-                  <div key={n.name} className="space-y-1">
-                    <p className={`text-2xl font-black ${n.value > 0 ? 'text-white' : 'text-white/20'}`}>{n.value}</p>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted">{n.name}</p>
-                  </div>
-                ))}
+            </div>
+
+            <div className="mt-4 p-4 bg-black/20 rounded-2xl border border-white/5">
+              <p className={`text-sm font-bold ${whatIfResult.simPnl > analyticsChartData.totalPnl ? 'text-spotify-green' : 'text-red-400'}`}>
+                {whatIfResult.simPnl > analyticsChartData.totalPnl
+                  ? `✓ Fixing this would improve your P&L by ${toDisp(whatIfResult.simPnl - analyticsChartData.totalPnl)} (+${Math.round(((whatIfResult.simPnl - analyticsChartData.totalPnl) / Math.max(Math.abs(analyticsChartData.totalPnl), 1)) * 100)}%)`
+                  : `⚠ Removing this reduces trade count by ${trades.length - whatIfResult.simTrades} but may not improve overall results`
+                }
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── LAYER 4: WHAT SHOULD I DO NEXT? ── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="w-6 h-6 rounded-full bg-blue-400/20 flex items-center justify-center text-[10px] font-black text-blue-400">4</span>
+          <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white">What Should I Do Next?</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Top recommendation */}
+          <div className="relative bg-white/[0.03] border border-white/10 rounded-3xl p-6 overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-400/30 to-transparent" />
+            <p className="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-3">Weekly Focus</p>
+            {analyticsChartData.edges.length > 0 ? (
+              <>
+                <p className="text-sm font-black text-white mb-2">
+                  Double down on <span className="text-spotify-green">{analyticsChartData.edges[0].label}</span>
+                </p>
+                <p className="text-[11px] text-white/50 leading-relaxed">
+                  Your strongest edge — {analyticsChartData.edges[0].wr}% win rate across {analyticsChartData.edges[0].impact > 0 ? `+${toDisp(analyticsChartData.edges[0].impact)}` : toDisp(analyticsChartData.edges[0].impact)} in total P&L. Increase frequency here, not elsewhere.
+                </p>
+                {analyticsChartData.leaks.length > 0 && (
+                  <p className="text-[11px] text-red-400/80 mt-3 leading-relaxed">
+                    Simultaneously stop: <span className="font-bold">{analyticsChartData.leaks[0].label}</span> — costing you {toDisp(analyticsChartData.leaks[0].impact)} across {analyticsChartData.leaks[0].freq} trades.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-[11px] text-white/40">Log more trades to unlock personalized recommendations.</p>
+            )}
+          </div>
+
+          {/* Risk metrics */}
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-4">Risk Profile</p>
+            <div className="space-y-4">
+              {[
+                { label: 'Avg Win', value: toDisp(analyticsChartData.avgWin), color: 'text-spotify-green' },
+                { label: 'Avg Loss', value: toDisp(analyticsChartData.avgLoss), color: 'text-red-400' },
+                { label: 'Avg R:R', value: `1:${analyticsChartData.avgRR}`, color: parseFloat(analyticsChartData.avgRR) >= 2 ? 'text-spotify-green' : 'text-yellow-400' },
+                { label: 'Max Consec. Wins', value: analyticsChartData.maxConsecWins.toString(), color: 'text-spotify-green' },
+                { label: 'Max Consec. Losses', value: analyticsChartData.maxConsecLosses.toString(), color: 'text-red-400' },
+              ].map(m => (
+                <div key={m.label} className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{m.label}</p>
+                  <p className={`text-sm font-black ${m.color}`}>{m.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* AI Mentor CTA */}
+        <div
+          onClick={() => setIsInsightModalOpen(true)}
+          className="relative overflow-hidden bg-gradient-to-br from-spotify-green/10 via-spotify-green/5 to-transparent border border-spotify-green/20 rounded-3xl p-6 cursor-pointer hover:border-spotify-green/40 transition-all group"
+        >
+          <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-spotify-green/10 rounded-full blur-[60px] pointer-events-none group-hover:bg-spotify-green/20 transition-all" />
+          <div className="relative z-10 flex items-center justify-between gap-6">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-spotify-green mb-1">AI Mentor</p>
+              <p className="text-sm font-black text-white">Want a deeper read on your performance?</p>
+              <p className="text-[11px] text-white/40 mt-1">Get a personalized coaching report, risk audit, or prop firm readiness score.</p>
+            </div>
+            <div className="bg-spotify-green text-black p-3 rounded-2xl shrink-0 group-hover:scale-110 transition-transform">
+              <Sparkles size={20} />
+            </div>
+          </div>
+        </div>
+
+        {/* Equity curves — now moved to bottom as supporting detail */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4">Session Equity Curves</h3>
+            <div className="h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analyticsChartData.sessionTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                  <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 8, fontWeight: 700 }} minTickGap={30} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 8, fontWeight: 700 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }} />
+                  <Line type="monotone" dataKey="London" stroke="#1DB954" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="New York" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="Asia" stroke="#6b7280" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex justify-center gap-4 mt-3">
+              {[['#1DB954', 'London'], ['#3b82f6', 'New York'], ['#6b7280', 'Asia']].map(([c, l]) => (
+                <div key={l} className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: c }} /><span className="text-[9px] font-bold text-spotify-muted">{l}</span></div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4">Setup Equity Curves</h3>
+            <div className="h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analyticsChartData.setupTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                  <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 8, fontWeight: 700 }} minTickGap={30} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 8, fontWeight: 700 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }} />
+                  {analyticsChartData.topSetups.map((setup: string, i: number) => (
+                    <Line key={setup} type="monotone" dataKey={setup} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3 mt-3">
+              {analyticsChartData.topSetups.map((setup: string, i: number) => (
+                <div key={setup} className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} /><span className="text-[9px] font-bold text-spotify-muted truncate max-w-[80px]">{setup}</span></div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* News impact + Best/worst trades */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-spotify-muted mb-4">News Impact</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {analyticsChartData.newsData.map((n: any) => (
+                <div key={n.name} className="bg-black/20 rounded-2xl p-4 text-center border border-white/5">
+                  <p className={`text-2xl font-black ${n.value > 0 ? 'text-white' : 'text-white/20'}`}>{n.value}</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-spotify-muted mt-1">{n.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div className="bg-spotify-green/10 border border-spotify-green/20 rounded-3xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[9px] font-black uppercase text-spotify-green tracking-widest mb-1">Best Trade</p>
+                <p className="text-xl font-black text-white">{toDisp(analyticsChartData.bestTrade?.usdPnl || 0)}</p>
+                <p className="text-[9px] text-spotify-muted mt-0.5">{analyticsChartData.bestTrade ? `${analyticsChartData.bestTrade.pair} · ${analyticsChartData.bestTrade.date}` : '—'}</p>
               </div>
-           </div>
-           <div className="mt-8 bg-white/5 p-8 rounded-xl text-center">
-              <h4 className="text-[10px] font-extrabold text-spotify-muted uppercase tracking-widest mb-4">Win Rate by Emotion</h4>
-              <div className="flex flex-wrap justify-center gap-2">
-                {analyticsChartData.emotionData.map(e => (
-                  <div key={e.name} className="px-4 py-2 bg-spotify-black rounded-lg border border-white/5">
-                    <p className="text-[8px] font-black uppercase text-spotify-muted opacity-50 tracking-widest">{e.name}</p>
-                    <p className={`text-lg font-black tracking-tighter ${e.wr >= 50 ? 'text-spotify-green' : 'text-red-500'}`}>{e.wr}%</p>
-                  </div>
-                ))}
+              <div className="bg-spotify-green p-2.5 rounded-full text-black"><TrendingUp size={18} /></div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-3xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-[9px] font-black uppercase text-red-500 tracking-widest mb-1">Worst Trade</p>
+                <p className="text-xl font-black text-white">{toDisp(analyticsChartData.worstTrade?.usdPnl || 0)}</p>
+                <p className="text-[9px] text-spotify-muted mt-0.5">{analyticsChartData.worstTrade ? `${analyticsChartData.worstTrade.pair} · ${analyticsChartData.worstTrade.date}` : '—'}</p>
               </div>
-           </div>
+              <div className="bg-red-500 p-2.5 rounded-full text-white"><TrendingDown size={18} /></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
 
 function ReviewPage({ reviews, onDeleteReview, trades }: any) {
   const { user, showToast } = useAuth();
