@@ -7511,11 +7511,49 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
       { name: 'No News', value: newsImpactMap.no }
     ];
 
+    // Profit Factor
+    const grossProfit = tradesWithUsdPnl.filter((t: any) => t.usdPnl > 0).reduce((sum: number, t: any) => sum + t.usdPnl, 0);
+    const grossLoss = Math.abs(tradesWithUsdPnl.filter((t: any) => t.usdPnl < 0).reduce((sum: number, t: any) => sum + t.usdPnl, 0));
+    const profitFactor = sanitize(grossLoss > 0 ? parseFloat((grossProfit / grossLoss).toFixed(2)) : grossProfit > 0 ? 999 : 0);
+
+    // Expectancy
+    const winTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl > 0);
+    const lossTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl < 0);
+    const avgWin = winTrades.length ? winTrades.reduce((s: number, t: any) => s + t.usdPnl, 0) / winTrades.length : 0;
+    const avgLoss = lossTrades.length ? Math.abs(lossTrades.reduce((s: number, t: any) => s + t.usdPnl, 0) / lossTrades.length) : 0;
+    const winRate = trades.length ? winTrades.length / trades.length : 0;
+    const expectancy = sanitize(parseFloat(((winRate * avgWin) - ((1 - winRate) * avgLoss)).toFixed(2)));
+
+    // Consecutive wins/losses
+    const sortedByDate = [...trades].sort((a: any, b: any) => a.date.localeCompare(b.date));
+    let maxConsecWins = 0, maxConsecLosses = 0, curWins = 0, curLosses = 0;
+    sortedByDate.forEach((t: any) => {
+      if (t.result?.toUpperCase() === 'WIN') { curWins++; curLosses = 0; maxConsecWins = Math.max(maxConsecWins, curWins); }
+      else if (t.result?.toUpperCase() === 'LOSS') { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
+      else { curWins = 0; curLosses = 0; }
+    });
+
+    // Average win vs average loss
+    const avgWinDisplay = sanitize(avgWin);
+    const avgLossDisplay = sanitize(avgLoss);
+
+    // Best day of week
+    const dayMap: any = { 0: { name: 'Sun', pnl: 0, count: 0 }, 1: { name: 'Mon', pnl: 0, count: 0 }, 2: { name: 'Tue', pnl: 0, count: 0 }, 3: { name: 'Wed', pnl: 0, count: 0 }, 4: { name: 'Thu', pnl: 0, count: 0 }, 5: { name: 'Fri', pnl: 0, count: 0 }, 6: { name: 'Sat', pnl: 0, count: 0 } };
+    tradesWithUsdPnl.forEach((t: any) => {
+      const day = new Date(t.date).getDay();
+      if (dayMap[day]) { dayMap[day].pnl += t.usdPnl; dayMap[day].count++; }
+    });
+    const dayData = Object.values(dayMap) as any[];
+    const bestDay = dayData.reduce((best: any, d: any) => d.pnl > best.pnl ? d : best, dayData[0]);
+    const worstDay = dayData.reduce((worst: any, d: any) => d.pnl < worst.pnl ? d : worst, dayData[0]);
+
     return { 
       sessionData, swr, lwr, emotionData, 
       shortsCount: shorts.length, longsCount: longs.length,
       setupPerformanceData, sessionTrendData, setupTrendData,
-      topSetups, bestTrade, worstTrade, avgRR, newsData
+      topSetups, bestTrade, worstTrade, avgRR, newsData,
+      profitFactor, expectancy, maxConsecWins, maxConsecLosses,
+      avgWinDisplay, avgLossDisplay, bestDay, worstDay, dayData
     };
   }, [trades]);
 
@@ -7557,7 +7595,8 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
         />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Row 1 — existing stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Short Win Rate" value={`${analyticsChartData.swr}%`} sub={`${analyticsChartData.shortsCount} trades`} />
         <StatCard label="Long Win Rate" value={`${analyticsChartData.lwr}%`} sub={`${analyticsChartData.longsCount} trades`} />
         <StatCard label="Avg Risk:Reward" value={`1:${analyticsChartData.avgRR}`} sub="Target vs Risk" />
@@ -7566,6 +7605,61 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
           value={analyticsChartData.sessionData.length > 0 ? [...analyticsChartData.sessionData].sort((a:any, b:any) => b.wr - a.wr)[0].name : "None"} 
           sub="Highest Win Rate" 
         />
+      </div>
+
+      {/* Row 2 — new advanced metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard 
+          label="Profit Factor" 
+          value={analyticsChartData.profitFactor === 999 ? '∞' : analyticsChartData.profitFactor.toFixed(2)} 
+          sub={analyticsChartData.profitFactor >= 1.5 ? '✓ Positive edge' : analyticsChartData.profitFactor >= 1 ? 'Breakeven zone' : '✗ Negative edge'}
+          valueColor={analyticsChartData.profitFactor >= 1.5 ? 'text-spotify-green' : analyticsChartData.profitFactor >= 1 ? 'text-yellow-400' : 'text-red-500'}
+        />
+        <StatCard 
+          label="Expectancy" 
+          value={`${analyticsChartData.expectancy >= 0 ? '+' : ''}${formatCurrency(convertCurrency(analyticsChartData.expectancy, 'USD', displayCurrency), displayCurrency)}`}
+          sub="Per trade average"
+          valueColor={analyticsChartData.expectancy >= 0 ? 'text-spotify-green' : 'text-red-500'}
+        />
+        <StatCard 
+          label="Max Consec. Wins" 
+          value={analyticsChartData.maxConsecWins.toString()}
+          sub={`Max losses: ${analyticsChartData.maxConsecLosses}`}
+          valueColor="text-spotify-green"
+        />
+        <StatCard 
+          label="Avg Win / Loss" 
+          value={`${formatCurrency(convertCurrency(analyticsChartData.avgWinDisplay, 'USD', displayCurrency), displayCurrency)}`}
+          sub={`Avg loss: ${formatCurrency(convertCurrency(analyticsChartData.avgLossDisplay, 'USD', displayCurrency), displayCurrency)}`}
+          valueColor="text-spotify-green"
+        />
+      </div>
+
+      {/* Day of Week Performance */}
+      <div className="bg-spotify-card p-6 md:p-8 rounded-2xl border border-white/5">
+        <h3 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted mb-6">Day of Week Performance</h3>
+        <div className="grid grid-cols-7 gap-2">
+          {analyticsChartData.dayData.map((d: any) => {
+            const isPositive = d.pnl >= 0;
+            const isBest = d.name === analyticsChartData.bestDay.name;
+            const isWorst = d.name === analyticsChartData.worstDay.name && d.pnl < 0;
+            return (
+              <div key={d.name} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                isBest ? 'bg-spotify-green/10 border-spotify-green/20' :
+                isWorst ? 'bg-red-500/10 border-red-500/20' :
+                'bg-white/[0.02] border-white/5'
+              }`}>
+                <p className="text-[9px] font-black uppercase tracking-widest text-white/40">{d.name}</p>
+                <p className={`text-xs font-black ${isPositive ? 'text-spotify-green' : 'text-red-400'}`}>
+                  {d.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(d.pnl, 'USD', displayCurrency), displayCurrency)}
+                </p>
+                <p className="text-[8px] text-white/20">{d.count}T</p>
+                {isBest && <span className="text-[7px] text-spotify-green font-black uppercase tracking-widest">Best</span>}
+                {isWorst && <span className="text-[7px] text-red-400 font-black uppercase tracking-widest">Avoid</span>}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
