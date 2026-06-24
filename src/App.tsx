@@ -2362,7 +2362,142 @@ function CountUpNumber({ value, formatter, className }: { value: number; formatt
   }, [safeValue]);
 
   return <span className={className}>{formatter(display)}</span>;
-}return (
+}
+
+function DashboardPage({ stats, trades, onTradeClick, displayCurrency, setActivePage, plan, dailyGoals, onShareTrade, setups, onToggleExecute, setClosingSetup, chartType, setChartType, openRules }: { stats: any, trades: any, onTradeClick: any, displayCurrency: any, setActivePage: any, plan: any, dailyGoals?: string, onShareTrade: (t: Trade) => void, setups: DailySetup[], onToggleExecute: (id: string, current: string) => void, setClosingSetup: (s: DailySetup) => void, chartType: 'Area' | 'Line' | 'Bar', setChartType: (c: 'Area' | 'Line' | 'Bar') => void, openRules: () => void }) {
+  const { user, showToast } = useAuth();
+  const firstName = user?.displayName?.split(' ')[0] || 'Trader';
+  const handleShareTrade = onShareTrade;
+
+  const [hasRules, setHasRules] = useState(false);
+  const [chartMetric, setChartMetric] = useState<'equity' | 'drawdown' | 'winrate'>('equity');
+  const [rulesPreview, setRulesPreview] = useState<any>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchRules = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid, 'settings', 'rules'));
+        if (snap.exists()) {
+          const data = snap.data();
+          const hasAnyRule = data.maxDailyLoss > 0 || data.maxTradesPerDay > 0 ||
+                             data.allowedSessions?.length > 0 ||
+                             data.flaggedEmotions?.length > 0 ||
+                             data.blockedEmotions?.length > 0;
+          setHasRules(hasAnyRule);
+          setRulesPreview(data);
+        }
+      } catch (e) {
+        console.error('Rules fetch error', e);
+      }
+    };
+    fetchRules();
+  }, [user]);
+
+  // Calculate monthly stats for plan progress
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  const currentMonthPnl = trades
+    .filter((t: any) => {
+      const d = new Date(t.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    })
+    .reduce((sum: number, t: any) => sum + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), 0);
+
+  const { greeting, sessionInfo } = useMemo(() => {
+    const hour = new Date().getUTCHours();
+    const min = new Date().getUTCMinutes();
+    const time = hour + min / 60;
+
+    // Sessions (UTC)
+    const sessions = [];
+    if (time >= 0 && time < 9) sessions.push({ name: 'Asia', color: 'text-orange-400', bg: 'bg-orange-400/10', active: true });
+    if (time >= 8 && time < 17) sessions.push({ name: 'London', color: 'text-spotify-green', bg: 'bg-spotify-green/10', active: true });
+    if (time >= 13 && time < 22) sessions.push({ name: 'New York', color: 'text-blue-400', bg: 'bg-blue-400/10', active: true });
+
+    const localHour = new Date().getHours();
+    const day = new Date().getDate();
+    let g = "Rise and grind";
+    if (localHour >= 5 && localHour < 12) {
+      const msgs = ["Good morning", "Rise and grind", "Happy hunting", "Ready for pips?", "Profit is calling", "Seize the green", "Embrace the loss, master the gain"];
+      g = msgs[(day + localHour) % msgs.length];
+    } else if (localHour >= 12 && localHour < 18) {
+      const msgs = ["Good afternoon", "Market's cooking", "Trade with intent", "Stay focused", "Market dominance", "Profit pursuit", "Every trade a lesson", "Losing is part of the growth"];
+      g = msgs[(day + localHour) % msgs.length];
+    } else if (localHour >= 18 && localHour < 22) {
+      const msgs = ["Good evening", "Review your day", "Discipline pays", "Consistency is key", "Profit analysis", "Learn from the losses", "Profit requires patience", "Mastery takes losses"];
+      g = msgs[(day + localHour) % msgs.length];
+    } else {
+      const msgs = ["Night owl mode", "Prep for London?", "Rest is trading", "Dreaming of pips?", "Visualize profit", "Losing is feedback", "Profit mindset", "Prepare for winning"];
+      g = msgs[(day + localHour) % msgs.length];
+    }
+
+    return { greeting: g, sessionInfo: sessions.filter(s => s.active) };
+  }, []);
+
+ const dashboardChartData = useMemo(() => {
+    if (!trades || !trades.length) return [];
+    const tradesWithUsdPnl = trades.map(t => ({
+      ...t,
+      usdPnl: convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')
+    }));
+
+    const sorted = [...tradesWithUsdPnl].sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.time.localeCompare(b.time);
+    });
+
+    let cumulativeUsd = 0;
+    let peak = 0;
+    let runningWins = 0;
+
+    return sorted.map((t, idx) => {
+      cumulativeUsd += t.usdPnl;
+      if (cumulativeUsd > peak) peak = cumulativeUsd;
+      const drawdownPct = peak > 0 ? ((peak - cumulativeUsd) / peak) * 100 : 0;
+
+      if (t.usdPnl > 0) runningWins++;
+      const runningWinRate = Math.round((runningWins / (idx + 1)) * 100);
+
+      const isWin = t.usdPnl > 0;
+      const isLoss = t.usdPnl < 0;
+
+      return {
+        id: t.id,
+        date: t.date,
+        pair: t.pair,
+        dir: t.dir,
+        displayDate: new Date(t.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        cumulativeUsd: Number(cumulativeUsd.toFixed(2)),
+        drawdownFloor: Number(cumulativeUsd.toFixed(2)),
+        drawdownGap: Number((peak - cumulativeUsd).toFixed(2)),
+        drawdownPct: Number(drawdownPct.toFixed(1)),
+        winRate: runningWinRate,
+        tradeUsdPnl: t.usdPnl,
+        isWin,
+        isLoss,
+        index: idx + 1
+      };
+    });
+  }, [trades]);
+
+const todayStats = useMemo(() => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    const todayTrades = trades.filter((t: any) => t.date === todayKey);
+    if (!todayTrades.length) return null;
+
+    const pnlUsd = todayTrades.reduce((sum: number, t: any) => sum + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
+    const wins = todayTrades.filter((t: any) => cleanMoney(t.pnl) > 0).length;
+
+    return {
+      count: todayTrades.length,
+      pnl: pnlUsd,
+      winRate: Math.round((wins / todayTrades.length) * 100)
+    };
+  }, [trades]);
+
+  return (
     <div className="space-y-6 animate-in fade-in duration-700 slide-in-from-bottom-2">
 
       {/* ═══ HERO — Greeting + Portfolio ═══ */}
@@ -2930,6 +3065,7 @@ function CountUpNumber({ value, formatter, className }: { value: number; formatt
       </div>
     </div>
   );
+}
 
 function DailyPlanPage({ goals, setups, onSaveGoals, onAddSetup, onUpdateSetup, onDeleteSetup, onToggleExecute, onLogTrade, displayCurrency, closingSetup, setClosingSetup }: any) {
   const [isAddingSetup, setIsAddingSetup] = useState(false);
