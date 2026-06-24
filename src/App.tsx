@@ -6814,12 +6814,14 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
     </div>
   );
 }
-
-function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDate, setEndDate, onTradeClick, onDelete, onBulkDelete, onBulkUpdate, onImportOpen, onExportOpen, displayCurrency, setIsEditingTrade, onShareTrade, }: any) {
+function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDate, setEndDate, onTradeClick, onDelete, onBulkDelete, onBulkUpdate, onImportOpen, onExportOpen, displayCurrency, setIsEditingTrade, onShareTrade }: any) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'daily' | 'table'>('daily');
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [whatIfDay, setWhatIfDay] = useState<{ date: string; filter: string } | null>(null);
   const { showToast } = useAuth();
   const [visibleCount, setVisibleCount] = useState(50);
 
@@ -6828,172 +6830,248 @@ function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDa
     return () => clearTimeout(timer);
   }, [search]);
 
-  const handleShareTrade = onShareTrade;
-  
+  const toUsd = (t: any) => convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
+  const toDisp = (usd: number) => formatCurrency(convertCurrency(usd, 'USD', displayCurrency), displayCurrency);
+
   const filteredTrades = useMemo(() => {
     let result = trades;
-
-    // Filter by search term (pair, setup, notes, tags)
     if (debouncedSearch) {
       const term = debouncedSearch.toLowerCase();
-      result = result.filter((t: any) => 
+      result = result.filter((t: any) =>
         t.pair?.toLowerCase().includes(term) ||
         t.setup?.toLowerCase().includes(term) ||
         t.notes?.toLowerCase().includes(term) ||
         (Array.isArray(t.tags) ? t.tags.some((tag: string) => tag.toLowerCase().includes(term)) : t.tags?.toLowerCase?.().includes?.(term))
       );
     }
-
-    // Filter by type/direction
     if (filter === 'win') result = result.filter((t: any) => t.result?.toLowerCase() === 'win');
-else if (filter === 'loss') result = result.filter((t: any) => t.result?.toLowerCase() === 'loss');
+    else if (filter === 'loss') result = result.filter((t: any) => t.result?.toLowerCase() === 'loss');
     else if (filter === 'short') result = result.filter((t: any) => t.dir === 'Short');
     else if (filter === 'long') result = result.filter((t: any) => t.dir === 'Long');
-
-    // Filter by date range
-   if (startDate) {
-  result = result.filter((t: any) => {
-    const tradeDate = t.date?.seconds 
-      ? new Date(t.date.seconds * 1000).toISOString().split('T')[0]
-      : t.date?.split('T')[0] || t.date;
-    return tradeDate >= startDate;
-  });
-}
-if (endDate) {
-  result = result.filter((t: any) => {
-    const tradeDate = t.date?.seconds 
-      ? new Date(t.date.seconds * 1000).toISOString().split('T')[0]
-      : t.date?.split('T')[0] || t.date;
-    return tradeDate <= endDate;
-  });
-}
-
+    if (startDate) result = result.filter((t: any) => (t.date?.split('T')[0] || t.date) >= startDate);
+    if (endDate) result = result.filter((t: any) => (t.date?.split('T')[0] || t.date) <= endDate);
     return result;
-  }, [trades, filter, startDate, endDate, search]);
+  }, [trades, filter, startDate, endDate, debouncedSearch]);
+
+  // Group trades by date for daily view
+  const tradesByDay = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    filteredTrades.forEach((t: any) => {
+      const d = t.date?.split('T')[0] || t.date || 'unknown';
+      if (!map[d]) map[d] = [];
+      map[d].push(t);
+    });
+    return Object.entries(map)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, dayTrades]) => {
+        const sorted = [...dayTrades].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+        const pnl = sorted.reduce((s: number, t: any) => s + toUsd(t), 0);
+        const wins = sorted.filter((t: any) => toUsd(t) > 0);
+        const losses = sorted.filter((t: any) => toUsd(t) < 0);
+        const wr = sorted.length ? Math.round((wins.length / sorted.length) * 100) : 0;
+
+        // Daily grade
+        const planTrades = sorted.filter((t: any) => t.plan && t.plan !== 'imported');
+        const disciplineScore = planTrades.length
+          ? Math.round((planTrades.filter((t: any) => t.plan === 'yes').length / planTrades.length) * 100)
+          : null;
+
+        const hasSlTrades = sorted.filter((t: any) => cleanMoney(t.sl) > 0).length;
+        const slScore = sorted.length ? Math.round((hasSlTrades / sorted.length) * 100) : 100;
+
+        const rrs = sorted.filter((t: any) => cleanMoney(t.entry) > 0 && cleanMoney(t.sl) > 0).map((t: any) => {
+          const e = cleanMoney(t.entry), x = cleanMoney(t.exit), s = cleanMoney(t.sl);
+          return Math.abs(x - e) / Math.abs(e - s);
+        });
+        const avgRR = rrs.length ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
+        const rrScore = Math.min(100, Math.round(avgRR * 50));
+
+        const emotionScore = sorted.every((t: any) =>
+          t.emotion?.toLowerCase().includes('calm') ||
+          t.emotion?.toLowerCase().includes('confident') ||
+          t.emotion?.toLowerCase().includes('disciplined')
+        ) ? 100 : sorted.some((t: any) =>
+          t.emotion?.toLowerCase().includes('revenge') ||
+          t.emotion?.toLowerCase().includes('frustrated')
+        ) ? 30 : 70;
+
+        const gradeScore = Math.round(
+          (disciplineScore ?? 50) * 0.35 +
+          slScore * 0.2 +
+          rrScore * 0.25 +
+          emotionScore * 0.2
+        );
+        const grade = gradeScore >= 90 ? 'A+' : gradeScore >= 80 ? 'A' : gradeScore >= 70 ? 'B' : gradeScore >= 60 ? 'C' : 'D';
+        const gradeColor = gradeScore >= 80 ? 'text-spotify-green' : gradeScore >= 60 ? 'text-yellow-400' : 'text-red-400';
+        const gradeBg = gradeScore >= 80 ? 'bg-spotify-green/10 border-spotify-green/20' : gradeScore >= 60 ? 'bg-yellow-400/10 border-yellow-400/20' : 'bg-red-500/10 border-red-500/20';
+
+        // Mistakes detection
+        const mistakes: string[] = [];
+        sorted.forEach((t: any) => {
+          if (t.plan === 'no') mistakes.push('No Plan');
+          if (!cleanMoney(t.sl)) mistakes.push('No Stop Loss');
+          if (t.emotion?.toLowerCase().includes('revenge')) mistakes.push('Revenge Trade');
+          if (t.news === 'high') mistakes.push('High Impact News');
+          if (t.emotion?.toLowerCase().includes('frustrated')) mistakes.push('Emotional Trade');
+        });
+        const uniqueMistakes = [...new Set(mistakes)];
+
+        // Session breakdown
+        const sessionMap: Record<string, { pnl: number; trades: any[] }> = {};
+        sorted.forEach((t: any) => {
+          const s = t.session || 'Unknown';
+          if (!sessionMap[s]) sessionMap[s] = { pnl: 0, trades: [] };
+          sessionMap[s].pnl += toUsd(t);
+          sessionMap[s].trades.push(t);
+        });
+
+        // Emotions journey
+        const emotionJourney = sorted.map((t: any, i: number) => ({
+          time: t.time || '',
+          emotion: t.emotion?.split('/')[0].trim() || 'Unknown',
+          result: t.result,
+          pnl: toUsd(t)
+        }));
+
+        return {
+          date, trades: sorted, pnl, wins: wins.length,
+          losses: losses.length, wr, grade, gradeColor, gradeBg,
+          gradeScore, disciplineScore, avgRR, uniqueMistakes,
+          sessionMap, emotionJourney
+        };
+      });
+  }, [filteredTrades]);
 
   const avgPerformance = useMemo(() => {
-    const wins = trades.filter((t: any) => t.result === 'win').map((t: any) => Math.abs(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')));
-    const losses = trades.filter((t: any) => t.result === 'loss').map((t: any) => Math.abs(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')));
-    
+    const wins = trades.filter((t: any) => t.result === 'win').map((t: any) => Math.abs(toUsd(t)));
+    const losses = trades.filter((t: any) => t.result === 'loss').map((t: any) => Math.abs(toUsd(t)));
     return {
-      win: wins.length ? (wins.reduce((a, b) => a + b, 0) / wins.length) : 1,
-      loss: losses.length ? (losses.reduce((a, b) => a + b, 0) / losses.length) : 1
+      win: wins.length ? wins.reduce((a: number, b: number) => a + b, 0) / wins.length : 1,
+      loss: losses.length ? losses.reduce((a: number, b: number) => a + b, 0) / losses.length : 1
     };
   }, [trades]);
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredTrades.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredTrades.map((t: any) => t.id));
-    }
+    if (selectedIds.length === filteredTrades.length) setSelectedIds([]);
+    else setSelectedIds(filteredTrades.map((t: any) => t.id));
   };
 
-  const toggleSelectTrade = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
+  const toggleDay = (date: string) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
   };
 
-  const handleBulkDelete = async () => {
-    await onBulkDelete(selectedIds);
-    setSelectedIds([]);
+  const getEmotionEmoji = (emotion: string) => {
+    const e = emotion.toLowerCase();
+    if (e.includes('calm') || e.includes('confident')) return '😌';
+    if (e.includes('revenge')) return '😤';
+    if (e.includes('frustrated') || e.includes('fearful')) return '😰';
+    if (e.includes('greedy') || e.includes('fomo')) return '🤑';
+    if (e.includes('excited') || e.includes('rushed')) return '⚡';
+    if (e.includes('bored')) return '😴';
+    return '😐';
+  };
+
+  const getMistakeIcon = (m: string) => {
+    if (m === 'No Plan') return '📋';
+    if (m === 'No Stop Loss') return '🚫';
+    if (m === 'Revenge Trade') return '😤';
+    if (m === 'High Impact News') return '📰';
+    if (m === 'Emotional Trade') return '😰';
+    return '⚠️';
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-24">
+
+      {/* ── HEADER ── */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter mb-1">Trade <span className="italic text-spotify-green">History</span></h1>
-          <p className="text-xs font-medium text-spotify-muted tracking-tight">Click any row for full technical breakdown.</p>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter mb-1">
+            Trade <span className="italic text-spotify-green">History</span>
+          </h1>
+          <p className="text-xs font-medium text-spotify-muted">
+            {viewMode === 'daily' ? 'Daily story — what happened and why.' : 'Table view — full trade list.'}
+          </p>
         </div>
-        
-        <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-center">
-          <div className="w-full sm:w-auto relative group">
-            <input 
+
+        <div className="flex flex-wrap gap-3 items-center">
+          {/* View toggle */}
+          <div className="flex items-center gap-1 bg-white/5 border border-white/5 p-1 rounded-full">
+            <button
+              onClick={() => setViewMode('daily')}
+              className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'daily' ? 'bg-spotify-green text-black' : 'text-white/40 hover:text-white'}`}
+            >
+              📖 Daily
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'table' ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}
+            >
+              ⚡ Table
+            </button>
+          </div>
+
+          {/* Search */}
+          <div className="relative group">
+            <input
               type="text"
               placeholder="Search pairs, setups, tags..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full sm:w-64 bg-white/5 border border-white/10 rounded-full py-3 pl-10 pr-4 text-xs font-bold text-white outline-none focus:border-spotify-green focus:bg-white/[0.08] transition-all"
+              className="w-56 bg-white/5 border border-white/10 rounded-full py-2.5 pl-9 pr-4 text-xs font-bold text-white outline-none focus:border-spotify-green transition-all"
             />
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-spotify-muted group-focus-within:text-spotify-green transition-colors">
-              <Sparkles size={14} />
-            </div>
+            <Sparkles size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-spotify-muted group-focus-within:text-spotify-green transition-colors" />
           </div>
 
-          <button 
+          {/* Import */}
+          <button
             onClick={onImportOpen}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-spotify-green text-spotify-darker font-extrabold uppercase tracking-widest text-[10px] px-6 py-3 rounded-full hover:scale-105 transition-all"
+            className="flex items-center gap-2 bg-spotify-green text-black font-black uppercase tracking-widest text-[10px] px-5 py-2.5 rounded-full hover:scale-105 transition-all"
           >
-            <Upload size={14} />
-            MT5 Import
+            <Upload size={13} /> Import
           </button>
 
+          {/* Bulk actions */}
           {selectedIds.length > 0 && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4 bg-white/5 border border-white/10 px-6 py-3 rounded-full shadow-2xl"
+              className="flex items-center gap-3 bg-white/5 border border-white/10 px-4 py-2 rounded-full"
             >
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-spotify-muted whitespace-nowrap">{selectedIds.length} selected</span>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setIsBulkEditOpen(true)}
-                  className="bg-spotify-green text-black text-[10px] font-extrabold uppercase tracking-widest px-4 py-1.5 rounded-full hover:scale-105 transition-all"
-                >
-                  Edit
-                </button>
-                <button 
-                  onClick={handleBulkDelete}
-                  className="bg-red-500/20 text-red-500 border border-red-500/30 text-[10px] font-extrabold uppercase tracking-widest px-4 py-1.5 rounded-full hover:bg-red-500 hover:text-white transition-all"
-                >
-                  Delete
-                </button>
-              </div>
+              <span className="text-[10px] font-black text-spotify-muted">{selectedIds.length} selected</span>
+              <button onClick={() => setIsBulkEditOpen(true)} className="bg-spotify-green text-black text-[10px] font-black uppercase px-3 py-1 rounded-full">Edit</button>
+              <button onClick={async () => { await onBulkDelete(selectedIds); setSelectedIds([]); }} className="bg-red-500/20 text-red-500 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-red-500/30">Delete</button>
             </motion.div>
           )}
 
-          <div className="w-full sm:w-auto flex gap-2 bg-white/5 p-4 rounded-xl border border-white/5 justify-between">
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-extrabold uppercase text-spotify-muted/50 tracking-widest ml-1 text-nowrap">Start Date</label>
-              <input 
-                type="date" 
-                value={startDate} 
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent border-0 text-white text-xs font-bold outline-none cursor-pointer focus:text-spotify-green transition-colors w-full"
-              />
+          {/* Date range */}
+          <div className="flex gap-2 bg-white/5 px-4 py-2.5 rounded-xl border border-white/5">
+            <div className="flex flex-col gap-0.5">
+              <label className="text-[8px] font-black uppercase text-white/20 tracking-widest">From</label>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer w-28" />
             </div>
-            <div className="w-[1px] bg-white/10 mx-2" />
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-extrabold uppercase text-spotify-muted/50 tracking-widest ml-1 text-nowrap">End Date</label>
-              <input 
-                type="date" 
-                value={endDate} 
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent border-0 text-white text-xs font-bold outline-none cursor-pointer focus:text-spotify-green transition-colors w-full"
-              />
+            <div className="w-px bg-white/10" />
+            <div className="flex flex-col gap-0.5">
+              <label className="text-[8px] font-black uppercase text-white/20 tracking-widest">To</label>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer w-28" />
             </div>
             {(startDate || endDate) && (
-              <button 
-                onClick={() => { setStartDate(''); setEndDate(''); }}
-                className="ml-2 p-1 text-spotify-muted hover:text-white transition-colors"
-                title="Clear Dates"
-              >
-                <X size={14} />
-              </button>
+              <button onClick={() => { setStartDate(''); setEndDate(''); }} className="text-white/30 hover:text-white ml-1"><X size={13} /></button>
             )}
           </div>
 
-          <div className="w-full sm:w-auto flex gap-1 bg-white/5 p-1 rounded-full border border-white/5 overflow-x-auto no-scrollbar">
-            {['all', 'win', 'loss', 'short', 'long'].map(f => (
+          {/* Filter pills */}
+          <div className="flex gap-1 bg-white/5 p-1 rounded-full border border-white/5">
+            {['all', 'win', 'loss', 'long', 'short'].map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-4 py-1.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest transition-all whitespace-nowrap flex-1 sm:flex-none ${
-                  filter === f ? 'bg-white text-black' : 'text-spotify-muted hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${filter === f ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}
               >
                 {f}
               </button>
@@ -7002,132 +7080,428 @@ if (endDate) {
         </div>
       </div>
 
-      <div className="bg-spotify-card rounded-lg overflow-hidden shadow-2xl">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
-          <h2 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted">{filteredTrades.length} Trade{filteredTrades.length !== 1 ? 's' : ''}</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-[9px] md:text-[10px] uppercase tracking-widest text-spotify-muted border-b border-white/5 bg-white/[0.02]">
-                <th className="px-3 md:px-5 py-4 w-10">
-                  <input 
-                    type="checkbox" 
-                    checked={filteredTrades.length > 0 && selectedIds.length === filteredTrades.length}
-                    onChange={toggleSelectAll}
-                    className="accent-spotify-green w-4 h-4 cursor-pointer"
-                  />
-                </th>
-                <th className="px-3 md:px-5 py-4 font-bold">Date</th>
-                <th className="px-3 md:px-5 py-4 font-bold">Pair</th>
-                <th className="px-3 md:px-5 py-4 font-bold hidden sm:table-cell text-center">Lot</th>
-                <th className="px-3 md:px-5 py-4 font-bold hidden sm:table-cell">Dir</th>
-                <th className="px-3 md:px-5 py-4 font-bold hidden md:table-cell">Setup</th>
-                <th className="px-3 md:px-5 py-4 font-bold hidden sm:table-cell text-right">Entry</th>
-                <th className="px-3 md:px-5 py-4 font-bold hidden sm:table-cell text-right">Exit</th>
-                <th className="px-3 md:px-5 py-4 font-bold text-right">P&L</th>
-                <th className="px-3 md:px-5 py-4 font-bold text-center">Result</th>
-                <th className="px-3 md:px-5 py-4"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTrades.slice(0, visibleCount).map((t: Trade) => (
-                <tr 
-                  key={t.id} 
-                  onClick={() => onTradeClick(t)} 
-                  className={`group hover:bg-white/5 cursor-pointer transition-colors border-b border-white/[0.03] last:border-0 ${selectedIds.includes(t.id) ? 'bg-white/[0.03]' : ''}`}
+      {/* ── DAILY VIEW ── */}
+      {viewMode === 'daily' && (
+        <div className="space-y-6">
+          {tradesByDay.slice(0, visibleCount).map((day, dayIdx) => {
+            const isExpanded = expandedDays.has(day.date) || dayIdx === 0;
+            const dayDate = new Date(day.date + 'T12:00:00');
+            const formattedDate = dayDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+            // What If simulation for this day
+            const whatIfResult = whatIfDay?.date === day.date ? (() => {
+              const f = whatIfDay.filter;
+              const filtered = day.trades.filter((t: any) => {
+                if (f === 'no-losses') return toUsd(t) >= 0;
+                if (f === 'no-revenge') return !t.emotion?.toLowerCase().includes('revenge');
+                if (f === 'plan-only') return t.plan === 'yes';
+                if (f === 'best-session') {
+                  const bestSession = Object.entries(day.sessionMap).sort(([, a]: any, [, b]: any) => b.pnl - a.pnl)[0]?.[0];
+                  return t.session === bestSession;
+                }
+                return true;
+              });
+              const simPnl = filtered.reduce((s: number, t: any) => s + toUsd(t), 0);
+              return { simPnl, simTrades: filtered.length, label: f };
+            })() : null;
+
+            return (
+              <motion.div
+                key={day.date}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: dayIdx * 0.03 }}
+                className="bg-white/[0.015] border border-white/[0.06] rounded-3xl overflow-hidden"
+              >
+                {/* Day Header */}
+                <div
+                  className="p-6 cursor-pointer hover:bg-white/[0.02] transition-all"
+                  onClick={() => toggleDay(day.date)}
                 >
-                  <td className="px-3 md:px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedIds.includes(t.id)}
-                      onChange={(e) => toggleSelectTrade(t.id, e as any)}
-                      className="accent-spotify-green w-4 h-4 cursor-pointer"
-                    />
-                  </td>
-                  <td className="px-3 md:px-5 py-4 text-[10px] md:text-xs font-mono text-spotify-muted">{t.date}</td>
-                  <td className="px-3 md:px-5 py-4 text-[10px] md:text-xs font-bold">{t.pair}</td>
-                  <td className="px-3 md:px-5 py-4 hidden sm:table-cell text-center">
-                    <span className="text-[10px] font-mono text-white/60">{t.lot || '0.00'}</span>
-                  </td>
-                  <td className="px-3 md:px-5 py-4 hidden sm:table-cell">
-                    <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-[0.1em] ${t.dir === 'Long' ? 'bg-spotify-green/10 text-spotify-green' : 'bg-red-500/10 text-red-500'}`}>
-                      {t.dir}
-                    </span>
-                  </td>
-                  <td className="px-3 md:px-5 py-4 hidden md:table-cell">
-                    <div className="text-[11px] font-medium text-spotify-muted max-w-[120px] truncate group-hover:text-white transition-colors">{t.setup}</div>
-                  </td>
-                  <td className="px-3 md:px-5 py-4 text-[10px] font-mono text-right hidden sm:table-cell opacity-60">{formatNum(t.entry)}</td>
-                  <td className="px-3 md:px-5 py-4 text-[10px] font-mono text-right hidden sm:table-cell opacity-60">{formatNum(t.exit)}</td>
-                  <td className="px-3 md:px-5 py-4 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      <span className={`text-[10px] md:text-xs font-mono font-bold ${t.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-                        {t.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), displayCurrency)}
-                      </span>
-                      <div className="w-12 md:w-16 h-1 bg-white/[0.03] rounded-full overflow-hidden flex justify-end">
-                        <div 
-                          className={`h-full rounded-full transition-all duration-700 ${t.pnl >= 0 ? 'bg-spotify-green' : 'bg-red-500 opacity-60'}`}
-                          style={{ 
-                            width: `${Math.min(100, (Math.abs(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')) / (t.pnl >= 0 ? avgPerformance.win : avgPerformance.loss)) * 50)}%` 
-                          }}
-                        />
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    {/* Left — date + grade */}
+                    <div className="flex items-center gap-4">
+                      <div className={`w-14 h-14 rounded-2xl border flex flex-col items-center justify-center shrink-0 ${day.gradeBg}`}>
+                        <span className={`text-xl font-black ${day.gradeColor}`}>{day.grade}</span>
+                        <span className={`text-[8px] font-black uppercase tracking-widest ${day.gradeColor} opacity-60`}>Grade</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-white/40 uppercase tracking-widest mb-0.5">{formattedDate}</p>
+                        <div className="flex items-center gap-3">
+                          <p className={`text-2xl font-black tracking-tighter ${day.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                            {day.pnl >= 0 ? '+' : ''}{toDisp(day.pnl)}
+                          </p>
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-white/30">
+                            <span>{day.trades.length} trades</span>
+                            <span>·</span>
+                            <span>{day.wr}% WR</span>
+                            {day.disciplineScore !== null && (
+                              <>
+                                <span>·</span>
+                                <span className={day.disciplineScore >= 80 ? 'text-spotify-green' : 'text-yellow-400'}>
+                                  {day.disciplineScore}% discipline
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-3 md:px-5 py-4 text-center">
-                    <span className={`text-[9px] font-extrabold px-3 py-1 rounded-full uppercase tracking-tighter ${
-                      t.result === 'WIN' ? 'bg-spotify-green text-black shadow-[0_0_10px_rgba(29,185,84,0.3)]' : t.result === 'LOSS' ? 'bg-red-500 text-white' : 'bg-white/10 text-white'
-                    }`}>
-                      {t.result}
-                    </span>
-                  </td>
-                  <td className="px-3 md:px-5 py-4 text-right flex items-center justify-end gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleShareTrade(t); }}
-                      className="p-2 text-spotify-muted hover:text-spotify-green hover:bg-spotify-green/10 rounded-full transition-all"
-                      title="Share Result"
+
+                    {/* Right — session pills + mistakes + chevron */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {Object.entries(day.sessionMap).map(([session, data]: any) => (
+                        <div key={session} className={`px-3 py-1 rounded-full text-[9px] font-black border ${
+                          data.pnl >= 0 ? 'bg-spotify-green/10 border-spotify-green/20 text-spotify-green' : 'bg-red-500/10 border-red-500/20 text-red-400'
+                        }`}>
+                          {session} {data.pnl >= 0 ? '+' : ''}{toDisp(data.pnl)}
+                        </div>
+                      ))}
+                      {day.uniqueMistakes.length > 0 && (
+                        <div className="px-3 py-1 rounded-full text-[9px] font-black bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                          ⚠ {day.uniqueMistakes.length} mistake{day.uniqueMistakes.length > 1 ? 's' : ''}
+                        </div>
+                      )}
+                      <ChevronRight size={16} className={`text-white/20 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded content */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
                     >
-                      <Share2 size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onTradeClick(t); setIsEditingTrade?.(true); }}
-                      className="p-2 text-spotify-muted hover:text-spotify-green hover:bg-spotify-green/10 rounded-full transition-all"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
-                      className="p-2 text-spotify-muted hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all"
-                    >
-                      <X size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredTrades.length === 0 && (
-             <div className="p-32 text-center text-spotify-muted opacity-50">
-              <p className="text-sm font-bold mb-1">No trades matching filter</p>
-              <p className="text-xs font-medium uppercase tracking-[0.2em]">End of file</p>
+                      <div className="px-6 pb-6 space-y-6 border-t border-white/5">
+
+                        {/* Session Timeline */}
+                        <div className="pt-6">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-white/30 mb-4">Session Timeline</p>
+                          <div className="relative pl-6">
+                            <div className="absolute left-2 top-2 bottom-2 w-px bg-white/10" />
+                            {day.trades.map((t: any, i: number) => {
+                              const pnl = toUsd(t);
+                              const isWin = pnl > 0;
+                              return (
+                                <div
+                                  key={t.id}
+                                  onClick={() => onTradeClick(t)}
+                                  className="relative flex items-start gap-4 mb-4 cursor-pointer group"
+                                >
+                                  <div className={`absolute -left-4 w-3 h-3 rounded-full border-2 border-[#0d0d0d] shrink-0 mt-1 ${isWin ? 'bg-spotify-green' : pnl < 0 ? 'bg-red-500' : 'bg-white/20'}`} />
+                                  <div className="flex-1 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 rounded-2xl p-4 transition-all group-hover:border-white/10">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          <span className="text-xs font-black text-white">{t.pair}</span>
+                                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${t.dir === 'Long' ? 'bg-spotify-green/10 text-spotify-green' : 'bg-red-500/10 text-red-400'}`}>{t.dir}</span>
+                                          {t.setup && <span className="text-[9px] text-white/30">{t.setup}</span>}
+                                          {t.session && <span className="text-[9px] text-white/20 border border-white/10 px-1.5 rounded">{t.session}</span>}
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[9px] text-white/30">
+                                          {t.time && <span className="font-mono">{t.time}</span>}
+                                          {cleanMoney(t.entry) > 0 && <span>E: {formatNum(t.entry)}</span>}
+                                          {cleanMoney(t.exit) > 0 && <span>X: {formatNum(t.exit)}</span>}
+                                          {cleanMoney(t.sl) > 0 && cleanMoney(t.entry) > 0 && (
+                                            <span>RR: 1:{(Math.abs(cleanMoney(t.exit) - cleanMoney(t.entry)) / Math.abs(cleanMoney(t.entry) - cleanMoney(t.sl))).toFixed(1)}</span>
+                                          )}
+                                        </div>
+                                        {/* Emotion + plan */}
+                                        <div className="flex items-center gap-2 mt-2">
+                                          <span className="text-sm">{getEmotionEmoji(t.emotion || '')}</span>
+                                          <span className="text-[9px] text-white/30">{t.emotion?.split('/')[0].trim()}</span>
+                                          {t.plan && t.plan !== 'imported' && (
+                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${t.plan === 'yes' ? 'bg-spotify-green/10 text-spotify-green' : t.plan === 'partial' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
+                                              {t.plan === 'yes' ? '✓ Plan' : t.plan === 'partial' ? '⚡ Partial' : '✗ No Plan'}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {t.notes && (
+                                          <p className="text-[10px] text-white/30 italic mt-2 leading-relaxed line-clamp-2">"{t.notes}"</p>
+                                        )}
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <p className={`text-base font-black font-mono ${isWin ? 'text-spotify-green' : pnl < 0 ? 'text-red-400' : 'text-white/40'}`}>
+                                          {pnl >= 0 ? '+' : ''}{toDisp(pnl)}
+                                        </p>
+                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${isWin ? 'bg-spotify-green text-black' : pnl < 0 ? 'bg-red-500 text-white' : 'bg-white/10 text-white'}`}>
+                                          {t.result || 'BE'}
+                                        </span>
+                                        {t.anomaly && (
+                                          <p className="text-[8px] text-amber-400 mt-1 flex items-center gap-1 justify-end">
+                                            <AlertTriangle size={10} /> Anomaly
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {t.ss && (
+                                      <div className="mt-3">
+                                        <img src={t.ss} alt="Screenshot" className="rounded-xl w-full max-h-40 object-cover border border-white/5" />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Emotional Journey */}
+                        {day.emotionJourney.length > 1 && (
+                          <div>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-white/30 mb-3">Emotional Journey</p>
+                            <div className="flex items-center gap-0 overflow-x-auto pb-2">
+                              {day.emotionJourney.map((e: any, i: number) => (
+                                <div key={i} className="flex items-center">
+                                  <div className="flex flex-col items-center gap-1 min-w-[60px]">
+                                    <span className="text-xl">{getEmotionEmoji(e.emotion)}</span>
+                                    <span className="text-[8px] text-white/30 text-center leading-tight">{e.emotion.split('/')[0].trim()}</span>
+                                    <span className={`text-[9px] font-black ${e.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>
+                                      {e.pnl >= 0 ? '+' : ''}{toDisp(e.pnl)}
+                                    </span>
+                                    {e.time && <span className="text-[7px] text-white/20 font-mono">{e.time.slice(0, 5)}</span>}
+                                  </div>
+                                  {i < day.emotionJourney.length - 1 && (
+                                    <div className="w-8 h-px bg-white/10 shrink-0" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Mistakes */}
+                        {day.uniqueMistakes.length > 0 && (
+                          <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-3">Mistakes This Day</p>
+                            <div className="flex flex-wrap gap-2">
+                              {day.uniqueMistakes.map((m: string) => (
+                                <div key={m} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                                  <span className="text-sm">{getMistakeIcon(m)}</span>
+                                  <span className="text-[10px] font-black text-amber-400">{m}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* What If Day Simulator */}
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-white/30 mb-3">If I Could Redo Today</p>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {[
+                              { id: 'no-losses', label: 'No Losers' },
+                              { id: 'no-revenge', label: 'No Revenge' },
+                              { id: 'plan-only', label: 'Plan Only' },
+                              { id: 'best-session', label: 'Best Session' },
+                            ].map(opt => (
+                              <button
+                                key={opt.id}
+                                onClick={() => setWhatIfDay(
+                                  whatIfDay?.date === day.date && whatIfDay?.filter === opt.id
+                                    ? null
+                                    : { date: day.date, filter: opt.id }
+                                )}
+                                className={`py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${
+                                  whatIfDay?.date === day.date && whatIfDay?.filter === opt.id
+                                    ? 'bg-spotify-green/20 border-spotify-green text-spotify-green'
+                                    : 'bg-white/5 border-white/10 text-white/40 hover:text-white'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {whatIfResult && whatIfDay?.date === day.date && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-3 bg-spotify-green/5 border border-spotify-green/20 rounded-2xl p-4"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-[9px] font-black text-spotify-green uppercase tracking-widest mb-1">
+                                    {whatIfResult.label === 'no-losses' ? 'Without Losing Trades' :
+                                     whatIfResult.label === 'no-revenge' ? 'Without Revenge Trades' :
+                                     whatIfResult.label === 'plan-only' ? 'Only Planned Trades' :
+                                     'Best Session Only'}
+                                  </p>
+                                  <div className="flex items-center gap-4">
+                                    <div>
+                                      <p className="text-[8px] text-white/30">Actual</p>
+                                      <p className={`text-lg font-black ${day.pnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>{day.pnl >= 0 ? '+' : ''}{toDisp(day.pnl)}</p>
+                                    </div>
+                                    <ChevronRight size={14} className="text-white/20" />
+                                    <div>
+                                      <p className="text-[8px] text-white/30">Simulated</p>
+                                      <p className={`text-lg font-black ${whatIfResult.simPnl >= 0 ? 'text-spotify-green' : 'text-red-400'}`}>{whatIfResult.simPnl >= 0 ? '+' : ''}{toDisp(whatIfResult.simPnl)}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[8px] text-white/30">Trades</p>
+                                      <p className="text-lg font-black text-white">{whatIfResult.simTrades}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className={`text-right ${whatIfResult.simPnl > day.pnl ? 'text-spotify-green' : 'text-red-400'}`}>
+                                  <p className="text-[9px] font-black uppercase">Delta</p>
+                                  <p className="text-xl font-black">
+                                    {whatIfResult.simPnl >= day.pnl ? '+' : ''}{toDisp(whatIfResult.simPnl - day.pnl)}
+                                  </p>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </div>
+
+                        {/* Day summary stats */}
+                        <div className="grid grid-cols-4 gap-3 pt-2 border-t border-white/5">
+                          {[
+                            { label: 'Wins', value: day.wins, color: 'text-spotify-green' },
+                            { label: 'Losses', value: day.losses, color: 'text-red-400' },
+                            { label: 'Avg RR', value: day.avgRR > 0 ? `1:${day.avgRR.toFixed(1)}` : '—', color: day.avgRR >= 2 ? 'text-spotify-green' : 'text-white' },
+                            { label: 'Grade Score', value: `${day.gradeScore}%`, color: day.gradeColor },
+                          ].map(s => (
+                            <div key={s.label} className="text-center">
+                              <p className={`text-lg font-black ${s.color}`}>{s.value}</p>
+                              <p className="text-[8px] font-black text-white/20 uppercase tracking-widest">{s.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
+
+          {tradesByDay.length === 0 && (
+            <div className="py-32 text-center">
+              <p className="text-sm font-black text-white/20 uppercase tracking-widest mb-2">No trading days found</p>
+              <p className="text-xs text-white/10">Adjust your filters or log some trades</p>
             </div>
           )}
-        </div>
-      </div>
 
-{visibleCount < filteredTrades.length && (
-  <button 
-    onClick={() => setVisibleCount(prev => prev + 50)}
-    className="w-full py-4 text-spotify-muted hover:text-white text-[10px] uppercase tracking-widest border border-white/5 rounded-xl hover:bg-white/5 transition-all mt-4"
-  >
-          Load More Trades
-        </button>
+          {visibleCount < tradesByDay.length && (
+            <button
+              onClick={() => setVisibleCount(prev => prev + 20)}
+              className="w-full py-4 text-spotify-muted hover:text-white text-[10px] uppercase tracking-widest border border-white/5 rounded-xl hover:bg-white/5 transition-all"
+            >
+              Load More Days ({tradesByDay.length - visibleCount} remaining)
+            </button>
+          )}
+        </div>
       )}
 
-      <BulkEditModal 
-        isOpen={isBulkEditOpen} 
-        onClose={() => setIsBulkEditOpen(false)} 
+      {/* ── TABLE VIEW (preserved from before) ── */}
+      {viewMode === 'table' && (
+        <div className="space-y-4">
+          <div className="bg-[#0d0d0d] rounded-2xl overflow-hidden border border-white/[0.04]">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-xs font-black uppercase tracking-widest text-spotify-muted">{filteredTrades.length} Trade{filteredTrades.length !== 1 ? 's' : ''}</h2>
+              <input
+                type="checkbox"
+                checked={filteredTrades.length > 0 && selectedIds.length === filteredTrades.length}
+                onChange={toggleSelectAll}
+                className="accent-spotify-green w-4 h-4 cursor-pointer"
+              />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[9px] uppercase tracking-widest text-spotify-muted border-b border-white/5 bg-white/[0.02]">
+                    <th className="px-4 py-3 w-10"></th>
+                    <th className="px-4 py-3 font-bold">Date</th>
+                    <th className="px-4 py-3 font-bold">Pair</th>
+                    <th className="px-4 py-3 font-bold hidden sm:table-cell">Dir</th>
+                    <th className="px-4 py-3 font-bold hidden md:table-cell">Setup</th>
+                    <th className="px-4 py-3 font-bold hidden sm:table-cell text-right">Entry</th>
+                    <th className="px-4 py-3 font-bold hidden sm:table-cell text-right">Exit</th>
+                    <th className="px-4 py-3 font-bold text-right">P&L</th>
+                    <th className="px-4 py-3 font-bold text-center">Result</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTrades.slice(0, visibleCount).map((t: any) => (
+                    <tr
+                      key={t.id}
+                      onClick={() => onTradeClick(t)}
+                      className={`group hover:bg-white/[0.04] hover:translate-x-0.5 cursor-pointer transition-all duration-200 border-b border-white/[0.03] last:border-0 ${selectedIds.includes(t.id) ? 'bg-white/[0.03]' : ''}`}
+                    >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(t.id)}
+                          onChange={(e) => { e.stopPropagation(); setSelectedIds(prev => prev.includes(t.id) ? prev.filter(i => i !== t.id) : [...prev, t.id]); }}
+                          className="accent-spotify-green w-4 h-4 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-spotify-muted">{t.date}</td>
+                      <td className="px-4 py-3 text-xs font-black text-white">{t.pair}</td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${t.dir === 'Long' ? 'bg-spotify-green/10 text-spotify-green' : 'bg-red-500/10 text-red-500'}`}>{t.dir}</span>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell text-[10px] text-spotify-muted max-w-[120px] truncate group-hover:text-white transition-colors">{t.setup}</td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-right hidden sm:table-cell opacity-50">{formatNum(t.entry)}</td>
+                      <td className="px-4 py-3 text-[10px] font-mono text-right hidden sm:table-cell opacity-50">{formatNum(t.exit)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`text-xs font-black font-mono ${t.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
+                            {t.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), displayCurrency)}
+                          </span>
+                          <div className="w-12 h-1 bg-white/[0.03] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${t.pnl >= 0 ? 'bg-spotify-green' : 'bg-red-500 opacity-60'}`}
+                              style={{ width: `${Math.min(100, (Math.abs(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')) / (t.pnl >= 0 ? avgPerformance.win : avgPerformance.loss)) * 50)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${t.result === 'WIN' ? 'bg-spotify-green text-black' : t.result === 'LOSS' ? 'bg-red-500 text-white' : 'bg-white/10 text-white'}`}>
+                          {t.result}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button onClick={(e) => { e.stopPropagation(); onShareTrade(t); }} className="p-1.5 text-spotify-muted hover:text-spotify-green rounded-full transition-all"><Share2 size={12} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); onTradeClick(t); setIsEditingTrade?.(true); }} className="p-1.5 text-spotify-muted hover:text-spotify-green rounded-full transition-all"><Edit2 size={12} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} className="p-1.5 text-spotify-muted hover:text-red-500 rounded-full transition-all"><X size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredTrades.length === 0 && (
+                <div className="py-32 text-center text-spotify-muted opacity-50">
+                  <p className="text-sm font-bold mb-1">No trades matching filter</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {visibleCount < filteredTrades.length && (
+            <button
+              onClick={() => setVisibleCount(prev => prev + 50)}
+              className="w-full py-4 text-spotify-muted hover:text-white text-[10px] uppercase tracking-widest border border-white/5 rounded-xl hover:bg-white/5 transition-all"
+            >
+              Load More ({filteredTrades.length - visibleCount} remaining)
+            </button>
+          )}
+        </div>
+      )}
+
+      <BulkEditModal
+        isOpen={isBulkEditOpen}
+        onClose={() => setIsBulkEditOpen(false)}
         onSave={(updates: any) => {
           onBulkUpdate(selectedIds, updates);
           setIsBulkEditOpen(false);
@@ -7138,287 +7512,6 @@ if (endDate) {
     </div>
   );
 }
-
-function CalendarPage({ trades, displayCurrency }: any) {
-  const [viewYear, setViewYear] = useState(new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState(new Date().getMonth());
-  const [selectedDay, setSelectedDay] = useState<any>(null);
-
-  const getLocalDateKey = (dateInput: any): string => {
-    let d: Date;
-    if (dateInput?.toDate) {
-      d = dateInput.toDate();
-    } else {
-      d = new Date(dateInput);
-    }
-    
-    if (isNaN(d.getTime())) return '';
-
-    return [
-      d.getFullYear(),
-      String(d.getMonth() + 1).padStart(2, '0'),
-      String(d.getDate()).padStart(2, '0')
-    ].join('-');
-  };
-  
-  const getTodayKey = (): string => {
-    const now = new Date();
-    return getLocalDateKey(now);
-  };
-
-  const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  const generateCalendarDays = (year: number, month: number) => {
-    const days = [];
-    const firstDay = new Date(year, month, 1).getDay(); // Sunday = 0
-    const lastDate = new Date(year, month + 1, 0).getDate();
-    const prevLastDate = new Date(year, month, 0).getDate();
-    
-    // Fill prev month
-    for (let i = firstDay - 1; i >= 0; i--) {
-      days.push({
-        date: prevLastDate - i,
-        month: month === 0 ? 11 : month - 1,
-        year: month === 0 ? year - 1 : year,
-        isCurrentMonth: false
-      });
-    }
-    
-    // Fill current month
-    for (let i = 1; i <= lastDate; i++) {
-        days.push({
-            date: i,
-            month: month,
-            year: year,
-            isCurrentMonth: true
-        });
-    }
-    
-    // Fill next month
-    const cellsToFill = days.length > 35 ? 42 : 35;
-    const remainingCells = cellsToFill - days.length;
-    for (let i = 1; i <= remainingCells; i++) {
-        days.push({
-            date: i,
-            month: month === 11 ? 0 : month + 1,
-            year: month === 11 ? year + 1 : year,
-            isCurrentMonth: false
-        });
-    }
-    return days;
-  };
-
-  const monthTrades = trades.filter((t: any) => {
-      const d = new Date(t.date);
-      return d.getFullYear() === viewYear && d.getMonth() === viewMonth;
-  });
-  const monthUsdPnl = monthTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-  const winRate = monthTrades.length > 0 ? (monthTrades.filter((t:any) => t.result === 'WIN').length / monthTrades.length) * 100 : 0;
-  
-  const dailyPnls = monthTrades.reduce((acc: any, t: any) => {
-    const dKey = getLocalDateKey(t.closeDate || t.date);
-      acc[dKey] = (acc[dKey] || 0) + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
-      return acc;
-  }, {});
-  const bestDayPnl = Object.keys(dailyPnls).length > 0 ? Math.max(...Object.values(dailyPnls) as number[]) : 0;
-
-  const handlePrev = () => {
-    if (viewYear === 2020 && viewMonth === 0) return;
-    if (viewMonth === 0) {
-      setViewYear(viewYear - 1);
-      setViewMonth(11);
-    } else {
-      setViewMonth(viewMonth - 1);
-    }
-  }
-
-  const handleNext = () => {
-    if (viewYear === 2027 && viewMonth === 11) return;
-    if (viewMonth === 11) {
-      setViewYear(viewYear + 1);
-      setViewMonth(0);
-    } else {
-      setViewMonth(viewMonth + 1);
-    }
-  }
-
-  const days = useMemo(() => generateCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
-  const weeks = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
-  }
-
-  return (
-    <div className="space-y-6 md:space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter mb-1">P&L <span className="italic text-spotify-green">Calendar</span></h1>
-          <p className="text-xs font-medium text-spotify-muted tracking-tight">Visualize your profitability across the timeline.</p>
-        </div>
-      </div>
-
-      <div className="bg-spotify-card rounded-xl overflow-hidden shadow-2xl border border-white/5">
-        <div className="p-4 md:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-white/10 bg-white/[0.02]">
-          <div className="flex items-center gap-1 md:gap-2">
-            <button onClick={handlePrev} disabled={viewYear === 2020 && viewMonth === 0} className="p-2 hover:bg-white/5 rounded-full text-spotify-muted transition-colors disabled:opacity-20"><ChevronLeft size={20}/></button>
-            <h2 className="text-sm md:text-lg font-black tracking-tighter w-40 text-center uppercase">{new Date(viewYear, viewMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
-            <button onClick={handleNext} disabled={viewYear === 2027 && viewMonth === 11} className="p-2 hover:bg-white/5 rounded-full text-spotify-muted transition-colors disabled:opacity-20"><ChevronRight size={20}/></button>
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 md:flex md:gap-6 md:items-end">
-             <div>
-                <div className="text-[9px] text-spotify-muted tracking-[2px]">MONTHLY RESULT</div>
-                <div className={`text-[22px] font-bold ${monthUsdPnl >= 0 ? 'text-[#00C853]' : 'text-[#FF3C3C]'}`}>{monthUsdPnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(monthUsdPnl, 'USD', displayCurrency), displayCurrency)}</div>
-             </div>
-             <div>
-                <div className="text-[9px] text-spotify-muted tracking-[2px]">TRADES</div>
-                <div className="text-[16px] font-bold text-white">{monthTrades.length}</div>
-             </div>
-             <div>
-                <div className="text-[9px] text-spotify-muted tracking-[2px]">WIN RATE</div>
-                <div className="text-[16px] font-bold text-white">{winRate.toFixed(0)}%</div>
-             </div>
-             <div>
-                <div className="text-[9px] text-spotify-muted tracking-[2px]">BEST DAY</div>
-                <div className="text-[16px] font-bold text-[#00C853]">{bestDayPnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(bestDayPnl, 'USD', displayCurrency), displayCurrency)}</div>
-             </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto w-full">
-          <div className="grid grid-cols-7 md:grid-cols-[repeat(7,1fr)_120px] gap-px bg-white/5 w-full">
-            {dayHeaders.map(h => (   <div key={h} className="bg-black/40 p-2 text-[8px] md:text-[10px] text-spotify-muted text-center font-bold tracking-widest">     <span className="hidden md:inline">{h}</span>     <span className="md:hidden">{h[0]}</span>   </div> ))}
-            <div className="bg-black/40 p-2 text-[8px] md:text-[10px] text-spotify-muted text-center font-bold tracking-widest hidden md:block">WEEK</div>
-
-            {weeks.map((week, weekIdx) => {
-                const weekTrades = week.filter(d => d.isCurrentMonth).flatMap(d => {
-                    const dateKey = `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}`;
-                    return trades.filter((t: any) => getLocalDateKey(t.closeDate || t.date) === dateKey);
-                });
-                const weekPnL = weekTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-                
-                return (
-                    <React.Fragment key={weekIdx}>
-                        {week.map((d, i) => {
-                            const dateKey = `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}`;
-                            const isToday = dateKey === getLocalDateKey(new Date());
-                            const dayTrades = trades.filter((t: any) => getLocalDateKey(t.closeDate || t.date) === dateKey);
-                            const pnl = dayTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-                            const winRate = dayTrades.length > 0 ? (dayTrades.filter((t:any) => t.result === 'WIN').length / dayTrades.length) * 100 : 0;
-                            
-                            const bg = !d.isCurrentMonth ? 'bg-transparent' : 
-                                         pnl >= 100 ? 'bg-spotify-green/20' : 
-                                         pnl > 0 ? 'bg-spotify-green/10' : 
-                                         pnl < -50 ? 'bg-red-500/20' : 
-                                         pnl < 0 ? 'bg-red-500/10' : 
-                                         dayTrades.length > 0 ? 'bg-white/5' : 'bg-transparent';
-                            const br = !d.isCurrentMonth ? 'border-white/[0.03]' : 
-                                       pnl >= 100 ? 'border-spotify-green/50' : 
-                                       pnl > 0 ? 'border-spotify-green/30' : 
-                                       pnl < -50 ? 'border-red-500/50' : 
-                                       pnl < 0 ? 'border-red-500/30' : 
-                                       dayTrades.length > 0 ? 'border-white/10' : 'border-transparent';
-                            
-                            return (
-                              <div key={i} onClick={() => {   if (dayTrades.length > 0) {     const displayDate = new Date(d.year, d.month, d.date);     setSelectedDay({dateKey, dayTrades, pnl, displayDate});   } }} 
-                                   className={`min-h-[52px] md:min-h-[85px] p-1 md:p-2 relative ${bg} border ${br} ${isToday ? 'border-2 border-[#00C853] !bg-[#00C853]/[0.06] shadow-[0_0_16px_rgba(0,200,83,0.25)]' : ''}`}
-                                   style={{ cursor: dayTrades.length > 0 ? 'pointer' : 'default' }}>
-                                   {isToday && <div className="hidden md:block absolute top-[6px] left-[8px] text-[8px] font-bold text-[#00C853] tracking-[1px]">TODAY</div>}
-                                   {d.isCurrentMonth && <span className={`absolute top-2 right-2 text-[10px] ${!d.isCurrentMonth ? 'opacity-20' : 'text-spotify-muted'}`}>{d.date}</span>}
-                                  {d.isCurrentMonth && dayTrades.length > 0 && (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center p-1 overflow-hidden">
-                                        <span className={`font-bold text-xs truncate ${pnl >= 0 ? 'text-[#00C853]' : 'text-[#FF3C3C]'}`}>
-                                          {Math.abs(pnl) >= 1000 ? (pnl >= 0 ? '+' : '-') + '$' + (Math.abs(pnl)/1000).toFixed(1) + 'K' : formatCurrency(convertCurrency(pnl, 'USD', displayCurrency), displayCurrency)}
-                                        </span>
-                                        <span className="text-[9px] text-spotify-muted truncate">{dayTrades.length} Trades</span>
-                                        <span className="text-[9px] text-spotify-muted truncate">{winRate.toFixed(0)}% Win</span>
-                                    </div>
-                                  )}
-                              </div>
-                          );
-                        })}
-                        <div className="bg-[#111111] p-3 flex flex-col justify-center items-center gap-1 border border-white/5 rounded-0 hidden md:flex">
-                            <span className="text-[9px] text-spotify-muted tracking-[2px] font-bold">W{weekIdx + 1}</span>
-                            <span className={`text-lg font-bold ${weekPnL >= 0 ? 'text-[#00C853]' : 'text-[#FF3C3C]'}`}>{weekPnL >= 0 ? '+' : ''}{formatCurrency(convertCurrency(weekPnL, 'USD', displayCurrency), displayCurrency)}</span>
-                            <span className="text-[10px] text-spotify-muted">{weekTrades.length} trades</span>
-                            <div className={`mt-1 text-[9px] px-2 py-0.5 rounded-full ${weekPnL > 0 ? 'bg-green-500/20 text-green-400' : weekPnL < 0 ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-white/40'}`}>
-                                {week.filter(d => d.isCurrentMonth).filter(d => {
-                                     const dateKey = `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}`;
-                                     return trades.filter((t: any) => getLocalDateKey(t.date) === dateKey).length > 0;
-                                }).length} days
-                            </div>
-                        </div>
-                    </React.Fragment>
-                );
-            })}
-        </div>
-        </div>
-      </div>
-
-      {selectedDay && (
-        <Modal 
-          onClose={() => setSelectedDay(null)} 
-          title={`${selectedDay.displayDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
-          showFooter={false}
-        >
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <p className="text-[10px] font-bold text-spotify-muted uppercase tracking-widest mb-1 text-center">Total P&L</p>
-                <p className={`text-2xl font-black text-center ${selectedDay.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-                  {selectedDay.pnl >= 0 ? '+' : ''}{formatCurrency(convertCurrency(selectedDay.pnl, 'USD', displayCurrency), displayCurrency)}
-                </p>
-              </div>
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <p className="text-[10px] font-bold text-spotify-muted uppercase tracking-widest mb-1 text-center">Trade Count</p>
-                <p className="text-2xl font-black text-center text-white">{selectedDay.dayTrades.length}</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-xs font-black text-spotify-muted uppercase tracking-widest flex items-center gap-2">
-                <Zap size={14} className="text-spotify-green" /> 
-                Day's Transactions
-              </h3>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
-                {selectedDay.dayTrades.map((t: any) => (
-                  <div key={t.id} className="bg-white/5 hover:bg-white/[0.08] p-4 rounded-xl border border-white/5 flex items-center justify-between transition-colors">
-                    <div className="flex items-center gap-4">
-                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-[10px] ${
-  t.result === 'WIN' || t.result === 'win'
-    ? 'bg-spotify-green/20 text-spotify-green'
-    : t.result === 'LOSS' || t.result === 'loss'
-    ? 'bg-red-500/20 text-red-500'
-    : 'bg-yellow-500/20 text-yellow-500'
-}`}>
-  {(t.direction || t.dir) === 'Long' ? 'BUY' : 'SEL'}
-</div>
-<div>
-<p className="text-sm font-black text-white">{t.symbol || t.pair || 'Unknown'}</p>
-                        <p className="text-[10px] font-bold text-spotify-muted uppercase tracking-widest">{t.time} • {t.setup || 'No Setup'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-black ${cleanMoney(t.pnl) >= 0 ? 'text-spotify-green' : 'text-red-500'}`}>
-                        {cleanMoney(t.pnl) >= 0 ? '+' : ''}{formatCurrency(convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', displayCurrency), displayCurrency)}
-                      </p>
-                      <p className="text-[9px] font-bold text-spotify-muted uppercase tracking-widest">{t.risk || 'No Risk'}% Risk</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => setSelectedDay(null)}
-              className="w-full bg-white text-black font-black uppercase tracking-widest text-xs py-4 rounded-full hover:bg-spotify-green transition-all"
-            >
-              Close Details
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
 }function AnalyticsPage({ trades, displayCurrency }: any) {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
