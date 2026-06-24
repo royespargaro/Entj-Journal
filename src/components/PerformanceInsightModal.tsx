@@ -9,37 +9,29 @@ interface PerformanceInsightModalProps {
 }
 
 const INSIGHT_MODES = [
-  { 
-    id: 'full', 
-    label: 'Full Report', 
-    icon: Brain, 
-    prompt: `Analyze this trader's performance and deliver a powerful structured report:
-
-**Your Biggest Edge** — what they do right, must keep doing, with specific numbers
-**Your Silent Leak** — the single biggest thing destroying their performance, be brutal  
-**Emotional Pattern** — how psychology is affecting results, name specific emotions
-**Risk Assessment** — is their risk management sustainable or gambling?
-**This Week's Priority** — one concrete action to improve immediately
-
-Be an elite prop desk mentor. Brutally honest. Reference actual numbers. Reassure where earned, challenge where needed.` 
+  {
+    id: 'full',
+    label: 'Full Report',
+    icon: Brain,
+    prompt: `Find the single behavior causing my largest drawdown. Estimate its exact dollar cost based on the data. Then find the single behavior producing my highest expectancy — estimate its contribution. Give exactly one recommendation to act on this week. Format: 3 sections max. No filler. Numbers only, no vague advice.`
   },
-  { 
-    id: 'edge', 
-    label: 'Find My Edge', 
-    icon: TrendingUp, 
-    prompt: `Analyze this trader's data and identify their statistical edge. What setups, sessions, and conditions produce their best results? Be specific with numbers. Tell them exactly how to exploit this edge more aggressively. End with a challenge: are they leaving money on the table?` 
+  {
+    id: 'edge',
+    label: 'Find My Edge',
+    icon: TrendingUp,
+    prompt: `From this trader's data: identify the one session, setup, and emotion combination that produces the highest profit factor. State the exact profit factor and win rate. Then tell them how aggressively they should concentrate on this combination vs. their current behavior. End with: "You are currently leaving approximately $X on the table per month by not focusing here." Use their actual numbers.`
   },
-  { 
-    id: 'risk', 
-    label: 'Risk Audit', 
-    icon: AlertTriangle, 
-    prompt: `Conduct a brutal risk management audit. Analyze lot sizing consistency, R:R ratios, drawdown patterns, and emotional trading. Tell them if they trade like a professional or are gambling. Give a risk score 1-10 and specific steps to improve. Their account survival depends on this.` 
+  {
+    id: 'risk',
+    label: 'Risk Audit',
+    icon: AlertTriangle,
+    prompt: `Audit this trader's risk management. Focus only on: lot sizing consistency (are they escalating after wins or losses?), R:R discipline (do they cut winners early or let losers run?), and max drawdown relative to their average win. Give a risk score 1-10. State exactly what the number-one risk behavior is costing them per month. One corrective action only.`
   },
-  { 
-    id: 'ready', 
-    label: 'Prop Firm Ready?', 
-    icon: Target, 
-    prompt: `Evaluate if this trader is ready for a prop firm challenge like FTMO. Analyze consistency, drawdown control, win rate, and emotional discipline. Give a readiness score 1-10. Tell them exactly what to fix before risking money on a challenge. Be honest but encouraging.` 
+  {
+    id: 'ready',
+    label: 'Prop Firm Ready?',
+    icon: Target,
+    prompt: `Evaluate prop firm readiness based purely on this trader's numbers — not general advice. Check: max daily drawdown vs. typical prop firm limits (5%), consistency of win rate week over week, profit factor stability, and emotional discipline score. Give a readiness score 1-10 with the exact number they need to reach on each metric before attempting a challenge. Be brutally specific.`
   },
 ];
 

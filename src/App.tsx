@@ -2176,6 +2176,36 @@ If no anomaly: return exactly the word NULL`}]
             />
           ) : (
             <div className="space-y-6">
+              {/* Trade Quality Score */}
+              {(() => {
+                const checks = [
+                  { label: 'Plan Followed', pass: selectedTrade.plan === 'yes' },
+                  { label: 'Has Stop Loss', pass: cleanMoney(selectedTrade.sl) > 0 },
+                  { label: 'R:R ≥ 2', pass: (() => { const e = cleanMoney(selectedTrade.entry), x = cleanMoney(selectedTrade.exit), s = cleanMoney(selectedTrade.sl); if (!e || !s || e === s) return false; return Math.abs(x - e) / Math.abs(e - s) >= 2; })() },
+                  { label: 'Calm Emotion', pass: selectedTrade.emotion?.toLowerCase().includes('calm') || selectedTrade.emotion?.toLowerCase().includes('confident') || selectedTrade.emotion?.toLowerCase().includes('disciplined') },
+                  { label: 'No High Impact News', pass: selectedTrade.news !== 'high' },
+                  { label: 'Has Notes', pass: !!selectedTrade.notes },
+                ];
+                const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);
+                const color = score >= 80 ? 'text-spotify-green' : score >= 60 ? 'text-yellow-400' : 'text-red-400';
+                const borderColor = score >= 80 ? 'border-spotify-green/20 bg-spotify-green/5' : score >= 60 ? 'border-yellow-400/20 bg-yellow-400/5' : 'border-red-500/20 bg-red-500/5';
+                return (
+                  <div className={`rounded-2xl border p-5 mb-2 ${borderColor}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted">Trade Quality Score</p>
+                      <p className={`text-2xl font-black ${color}`}>{score}<span className="text-sm text-white/30">/100</span></p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {checks.map(c => (
+                        <div key={c.label} className="flex items-center gap-2">
+                          <span className={`text-sm ${c.pass ? 'text-spotify-green' : 'text-red-400'}`}>{c.pass ? '✓' : '✗'}</span>
+                          <span className={`text-[10px] font-bold ${c.pass ? 'text-white/60' : 'text-white/30'}`}>{c.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-4">
                 <StatItem label="Date" value={selectedTrade.date} />
 <StatItem label="Time" value={selectedTrade.time} />
@@ -7571,7 +7601,57 @@ function CalendarPage({ trades, displayCurrency }: any) {
 
     // Performance score 
     const disciplineScore = Math.min(100, Math.round(winRate * 100 * 0.4 + Math.min(profitFactor / 3, 1) * 100 * 0.4 + (expectancy > 0 ? 20 : 0)));
+// Post-streak behavior analysis
+    const postStreakAnalysis = (() => {
+      const sorted = [...tradesWithUsdPnl].sort((a: any, b: any) =>
+        a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '')
+      );
 
+      const afterWin: any[] = [];
+      const afterLoss: any[] = [];
+      const afterConsec2Wins: any[] = [];
+      const afterConsec2Losses: any[] = [];
+
+      let streak = 0;
+
+      sorted.forEach((t: any, i: number) => {
+        if (i === 0) { streak = t.usdPnl > 0 ? 1 : t.usdPnl < 0 ? -1 : 0; return; }
+
+        const prev = sorted[i - 1];
+        const prevResult = prev.usdPnl > 0 ? 'win' : prev.usdPnl < 0 ? 'loss' : 'be';
+
+        if (prevResult === 'win') afterWin.push(t);
+        if (prevResult === 'loss') afterLoss.push(t);
+
+        if (streak >= 2) afterConsec2Wins.push(t);
+        if (streak <= -2) afterConsec2Losses.push(t);
+
+        if (t.usdPnl > 0) streak = streak > 0 ? streak + 1 : 1;
+        else if (t.usdPnl < 0) streak = streak < 0 ? streak - 1 : -1;
+        else streak = 0;
+      });
+
+      const calcStats = (arr: any[]) => {
+        if (!arr.length) return null;
+        const wins = arr.filter((t: any) => t.usdPnl > 0);
+        const losses = arr.filter((t: any) => t.usdPnl < 0);
+        const gp = wins.reduce((s: number, t: any) => s + t.usdPnl, 0);
+        const gl = Math.abs(losses.reduce((s: number, t: any) => s + t.usdPnl, 0));
+        const pf = gl > 0 ? parseFloat((gp / gl).toFixed(2)) : gp > 0 ? 999 : 0;
+        const wr = Math.round((wins.length / arr.length) * 100);
+        const avgRisk = arr.filter((t: any) => t.riskPercent).length
+          ? arr.filter((t: any) => t.riskPercent).reduce((s: number, t: any) => s + parseFloat(t.riskPercent || '0'), 0) / arr.filter((t: any) => t.riskPercent).length
+          : null;
+        return { wr, pf, count: arr.length, avgRisk };
+      };
+
+      return {
+        afterWin: calcStats(afterWin),
+        afterLoss: calcStats(afterLoss),
+        afterConsec2Wins: calcStats(afterConsec2Wins),
+        afterConsec2Losses: calcStats(afterConsec2Losses),
+      };
+    })();
     return {
       sessionData, swr, lwr, emotionData,
       shortsCount: shorts.length, longsCount: longs.length,
@@ -7581,7 +7661,8 @@ function CalendarPage({ trades, displayCurrency }: any) {
       avgWin, avgLoss, bestDay, worstDay, dayData,
       leaks, edges, disciplineScore, totalPnl,
       winRate: Math.round(winRate * 100),
-      tradesWithUsdPnl
+      tradesWithUsdPnl,
+      postStreakAnalysis
     };
   }, [trades]);
 
@@ -8012,7 +8093,156 @@ function CalendarPage({ trades, displayCurrency }: any) {
           </div>
         </motion.div>
       )}
+{/* ── POST-STREAK ANALYSIS ── */}
+      {analyticsChartData.postStreakAnalysis && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px] font-black text-purple-400">⚡</span>
+            <h2 className="text-sm font-black uppercase tracking-[0.3em] text-white">Behavior After Streaks</h2>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* After win */}
+            {analyticsChartData.postStreakAnalysis.afterWin && (
+              <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+                <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-4">After a Win</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterWin.wr >= 50 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterWin.wr}%
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Win Rate</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterWin.pf >= 1 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterWin.pf === 999 ? '∞' : analyticsChartData.postStreakAnalysis.afterWin.pf.toFixed(2)}
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Profit Factor</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className="text-xl font-black text-white">{analyticsChartData.postStreakAnalysis.afterWin.count}</p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Trades</p>
+                  </div>
+                </div>
+                {analyticsChartData.postStreakAnalysis.afterWin.avgRisk !== null && (
+                  <div className="mt-3 p-3 bg-black/20 rounded-xl border border-white/5">
+                    <p className="text-[10px] text-white/50">Avg Risk After Win: <span className="font-black text-white">{analyticsChartData.postStreakAnalysis.afterWin.avgRisk?.toFixed(1)}%</span></p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* After loss */}
+            {analyticsChartData.postStreakAnalysis.afterLoss && (
+              <div className="bg-white/[0.015] border border-white/[0.06] rounded-3xl p-6">
+                <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-4">After a Loss</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterLoss.wr >= 50 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterLoss.wr}%
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Win Rate</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterLoss.pf >= 1 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterLoss.pf === 999 ? '∞' : analyticsChartData.postStreakAnalysis.afterLoss.pf.toFixed(2)}
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Profit Factor</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className="text-xl font-black text-white">{analyticsChartData.postStreakAnalysis.afterLoss.count}</p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Trades</p>
+                  </div>
+                </div>
+                {analyticsChartData.postStreakAnalysis.afterLoss.avgRisk !== null && (
+                  <div className="mt-3 p-3 bg-black/20 rounded-xl border border-white/5">
+                    <p className="text-[10px] text-white/50">Avg Risk After Loss: <span className="font-black text-white">{analyticsChartData.postStreakAnalysis.afterLoss.avgRisk?.toFixed(1)}%</span></p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* After 2+ wins */}
+            {analyticsChartData.postStreakAnalysis.afterConsec2Wins && analyticsChartData.postStreakAnalysis.afterConsec2Wins.count >= 3 && (
+              <div className={`bg-white/[0.015] border rounded-3xl p-6 ${
+                analyticsChartData.postStreakAnalysis.afterConsec2Wins.pf < 1 ? 'border-red-500/20 bg-red-500/5' : 'border-white/[0.06]'
+              }`}>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted">After 2+ Wins</p>
+                  {analyticsChartData.postStreakAnalysis.afterConsec2Wins.pf < 1 && (
+                    <span className="text-[8px] font-black uppercase tracking-widest text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">⚠ Overconfidence Risk</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterConsec2Wins.wr >= 50 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterConsec2Wins.wr}%
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Win Rate</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterConsec2Wins.pf >= 1 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterConsec2Wins.pf === 999 ? '∞' : analyticsChartData.postStreakAnalysis.afterConsec2Wins.pf.toFixed(2)}
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Profit Factor</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className="text-xl font-black text-white">{analyticsChartData.postStreakAnalysis.afterConsec2Wins.count}</p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Trades</p>
+                  </div>
+                </div>
+                {analyticsChartData.postStreakAnalysis.afterConsec2Wins.avgRisk !== null && (
+                  <div className="mt-3 p-3 bg-black/20 rounded-xl border border-white/5">
+                    <p className="text-[10px] text-white/50">
+                      Avg Risk After 2+ Wins: <span className={`font-black ${(analyticsChartData.postStreakAnalysis.afterConsec2Wins.avgRisk || 0) > 1.5 ? 'text-red-400' : 'text-white'}`}>
+                        {analyticsChartData.postStreakAnalysis.afterConsec2Wins.avgRisk?.toFixed(1)}%
+                      </span>
+                      {(analyticsChartData.postStreakAnalysis.afterConsec2Wins.avgRisk || 0) > 1.5 && (
+                        <span className="text-red-400 ml-2">— risk escalation detected</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* After 2+ losses */}
+            {analyticsChartData.postStreakAnalysis.afterConsec2Losses && analyticsChartData.postStreakAnalysis.afterConsec2Losses.count >= 3 && (
+              <div className={`bg-white/[0.015] border rounded-3xl p-6 ${
+                analyticsChartData.postStreakAnalysis.afterConsec2Losses.pf < 1 ? 'border-red-500/20 bg-red-500/5' : 'border-spotify-green/20 bg-spotify-green/5'
+              }`}>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted">After 2+ Losses</p>
+                  {analyticsChartData.postStreakAnalysis.afterConsec2Losses.pf < 1 && (
+                    <span className="text-[8px] font-black uppercase tracking-widest text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">⚠ Revenge Risk</span>
+                  )}
+                  {analyticsChartData.postStreakAnalysis.afterConsec2Losses.pf >= 1.5 && (
+                    <span className="text-[8px] font-black uppercase tracking-widest text-spotify-green bg-spotify-green/10 px-2 py-0.5 rounded-full">✓ Good Recovery</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterConsec2Losses.wr >= 50 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterConsec2Losses.wr}%
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Win Rate</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className={`text-xl font-black ${analyticsChartData.postStreakAnalysis.afterConsec2Losses.pf >= 1 ? 'text-spotify-green' : 'text-red-400'}`}>
+                      {analyticsChartData.postStreakAnalysis.afterConsec2Losses.pf === 999 ? '∞' : analyticsChartData.postStreakAnalysis.afterConsec2Losses.pf.toFixed(2)}
+                    </p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Profit Factor</p>
+                  </div>
+                  <div className="bg-black/20 rounded-2xl p-3 text-center border border-white/5">
+                    <p className="text-xl font-black text-white">{analyticsChartData.postStreakAnalysis.afterConsec2Losses.count}</p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest mt-1">Trades</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* ── LAYER 4: WHAT SHOULD I DO NEXT? ── */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
