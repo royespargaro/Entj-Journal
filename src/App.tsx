@@ -7512,7 +7512,8 @@ function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDa
     </div>
   );
 }
-}function AnalyticsPage({ trades, displayCurrency }: any) {
+
+function AnalyticsPage({ trades, displayCurrency }: any) {
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
   const [whatIfFilter, setWhatIfFilter] = useState<{ type: string; value: string } | null>(null);
