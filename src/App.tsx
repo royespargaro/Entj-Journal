@@ -50,7 +50,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney } from './lib/utils';
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR } from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -1518,7 +1518,7 @@ TRADE DETAILS:
     }));
 
     const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
-const avgRRValue = avgRR(trades, 'actual');
+const avgRRValue = computeAvgRR(trades, 'actual');
 const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
     const sorted = [...tradesWithUsdPnl].sort((a, b) => b.usdPnl - a.usdPnl);
     const best = sorted[0];
