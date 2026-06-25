@@ -1311,7 +1311,8 @@ const { user, showToast, logout } = useAuth();
             stopLoss: stopLoss,
             takeProfit: takeProfit,
             lotSize: lotSize,
-            setup: data.setup || null,
+             setup: data.setup || null,
+            setupTags: Array.isArray(data.setupTags) ? data.setupTags : (data.setup ? [data.setup] : []),
             riskReward: Number(data.riskReward || 0),
             result: result,
             recapSummary: data.recapSummary || null,
@@ -1665,6 +1666,7 @@ TRADE DETAILS:
       takeProfit: tradeData.takeProfit ? cleanMoney(tradeData.takeProfit) : (tradeData.tp ? cleanMoney(tradeData.tp) : null),
       lotSize: tradeData.lotSize ? cleanMoney(tradeData.lotSize) : (tradeData.lot ? cleanMoney(tradeData.lot) : null),
       setup: tradeData.setup || null,
+      setupTags: Array.isArray(tradeData.setupTags) ? tradeData.setupTags : (tradeData.setup ? [tradeData.setup] : []),
       riskReward: tradeData.riskReward || null,
       result: tradeData.result ? tradeData.result.toUpperCase() : null,
       
@@ -1739,6 +1741,7 @@ If no anomaly: return exactly the word NULL`}]
       takeProfit: tradeData.takeProfit !== undefined ? cleanMoney(tradeData.takeProfit) : (tradeData.tp !== undefined ? cleanMoney(tradeData.tp) : null),
       lotSize: tradeData.lotSize !== undefined ? cleanMoney(tradeData.lotSize) : (tradeData.lot !== undefined ? cleanMoney(tradeData.lot) : null),
       setup: tradeData.setup || null,
+      setupTags: Array.isArray(tradeData.setupTags) ? tradeData.setupTags : (tradeData.setup ? [tradeData.setup] : []),
       riskReward: tradeData.riskReward || null,
       result: tradeData.result ? tradeData.result.toUpperCase() : null,
 
@@ -3753,7 +3756,8 @@ function QuickLogForm({ onSubmit, displayCurrency, showToast }: any) {
     result: 'win' as 'win' | 'loss' | 'be',
     emotion: 'Calm / Confident',
     plan: 'no' as 'yes' | 'no' | 'partial',
-    setup: 'MSS + FVG',
+     setup: 'MSS + FVG',
+    setupTags: ['MSS', 'FVG'] as string[],
     session: 'London',
     currency: displayCurrency || 'USD',
     news: 'no',
@@ -5009,14 +5013,15 @@ Note: ${notes}`
           )}
         </AnimatePresence>
       </form>
-      {isSetupPickerOpen && (
+    {isSetupPickerOpen && (
         <SetupPicker 
           isOpen={isSetupPickerOpen} 
           onClose={() => setIsSetupPickerOpen(false)} 
-          onSelect={(setup, tags) => {
+          onSelect={(setup, tags, setupList) => {
             setForm(prev => ({
               ...prev,
               setup,
+              setupTags: setupList,
               tags: [...new Set([...prev.tags, ...tags])]
             }));
             setIsSetupPickerOpen(false);
@@ -5972,13 +5977,25 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
       if (dd > maxDD) maxDD = dd;
     });
 
-    // Setup performance
+    // Setup performance — now aggregates by INDIVIDUAL setup tag, not the
+    // combined display string. A trade with 3 setups contributes its full
+    // P&L to all 3 buckets, so combo trades don't fragment the rankings.
     const setupMap: Record<string, { pnl: number; wins: number; count: number }> = {};
     trades.forEach((t: any) => {
-      if (!t.setup) return;
-      if (!setupMap[t.setup]) setupMap[t.setup] = { pnl: 0, wins: 0, count: 0 };
-      setupMap[t.setup].pnl += toUsd(t); setupMap[t.setup].count++;
-      if (cleanMoney(t.pnl) > 0) setupMap[t.setup].wins++;
+      const tags: string[] = Array.isArray(t.setupTags) && t.setupTags.length > 0
+        ? t.setupTags
+        : (t.setup ? [t.setup] : []); // fallback for old trades with no setupTags field
+      if (tags.length === 0) return;
+
+      const usd = toUsd(t);
+      const isWin = cleanMoney(t.pnl) > 0;
+
+      tags.forEach((setupName: string) => {
+        if (!setupMap[setupName]) setupMap[setupName] = { pnl: 0, wins: 0, count: 0 };
+        setupMap[setupName].pnl += usd;
+        setupMap[setupName].count++;
+        if (isWin) setupMap[setupName].wins++;
+      });
     });
     const setupStats = Object.entries(setupMap)
       .map(([setup, d]) => ({ setup, pnl: d.pnl, wr: Math.round((d.wins / d.count) * 100), count: d.count }))
