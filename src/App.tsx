@@ -1519,9 +1519,12 @@ TRADE DETAILS:
 
     const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
 
-    const avgRRValue = avgRR(trades, 'actual');
-const avgRR = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
-
+    const rrs = trades.filter(t => t.sl).map(t => {
+      const risk = Math.abs(t.entry - t.sl);
+      return risk ? Math.abs(t.exit - t.entry) / risk : 0;
+    });
+    const avgRR = rrs.length ? formatNum(rrs.reduce((a, b) => a + b, 0) / rrs.length, 1) : '—';
+    
     const sorted = [...tradesWithUsdPnl].sort((a, b) => b.usdPnl - a.usdPnl);
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
