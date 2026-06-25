@@ -165,3 +165,74 @@ export const cleanMoney = (val: any): number => {
   const parsed = parseFloat((hasMinus ? '-' : '') + normalizedNumeric);
   return isNaN(parsed) ? 0 : parsed;
 };
+
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR } from './lib/utils';
+
+import { PAIR_CONFIG } from '../constants';
+
+export function calcRR(
+  trade: {
+    entry?: number | string;
+    exit?:  number | string;
+    sl?:    number | string;
+    tp?:    number | string;
+    dir?:   string;
+    pnl?:   number | string;
+    lot?:   number | string;
+    pair?:  string;
+  },
+  type: 'planned' | 'actual' = 'actual'
+): { value: number; method: 'sl' | 'inferred' | null } | null {
+
+  const entry      = Number(trade.entry)  || 0;
+  const exit       = Number(trade.exit)   || 0;
+  const sl         = Number(trade.sl)     || 0;
+  const tp         = Number(trade.tp)     || 0;
+  const pnl        = cleanMoney(trade.pnl);
+  const lot        = Number(trade.lot)    || 0;
+  const isLong     = trade.dir === 'Long';
+  const config     = PAIR_CONFIG[(trade.pair || '') as keyof typeof PAIR_CONFIG];
+  const multiplier = config?.multiplier || 1;
+
+  if (!entry || !exit) return null;
+
+  const rewardPrice = isLong ? (exit - entry) : (entry - exit);
+
+  // Method 1 — SL is stored
+  if (sl && sl !== entry) {
+    const riskPrice = Math.abs(entry - sl);
+    if (riskPrice === 0) return null;
+
+    if (type === 'planned' && tp && tp !== entry) {
+      const plannedReward = isLong ? (tp - entry) : (entry - tp);
+      if (plannedReward <= 0) return null;
+      return { value: plannedReward / riskPrice, method: 'sl' };
+    }
+
+    return { value: rewardPrice / riskPrice, method: 'sl' };
+  }
+
+  // Method 2 — Infer risk from PnL + lot (actual only)
+  if (type === 'actual' && pnl && lot) {
+    const inferredRisk = Math.abs(pnl) / (lot * multiplier);
+    if (inferredRisk === 0) return null;
+    return { value: rewardPrice / inferredRisk, method: 'inferred' };
+  }
+
+  return null;
+}
+
+export function avgRR(
+  trades: any[],
+  type: 'planned' | 'actual' = 'actual'
+): number | null {
+  const values = trades
+    .map(t => calcRR(t, type))
+    .filter((r): r is NonNullable<ReturnType<typeof calcRR>> =>
+      r !== null && isFinite(r.value) && Math.abs(r.value) < 50
+    )
+    .map(r => r.value);
+
+  if (!values.length) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
