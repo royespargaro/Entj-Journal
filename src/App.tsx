@@ -82,6 +82,40 @@ import {
 } from 'recharts';
 import { PAIR_CONFIG, CURRENCIES, SESSIONS, getCurrentSessions } from './constants';
 
+/**
+ * Detects trading session from a time string (HH:MM), using non-overlapping
+ * UTC buckets so every imported trade gets exactly one session.
+ *
+ * MT5 broker server time is commonly UTC+2 or UTC+3 (not UTC) — pass
+ * serverOffsetHours to correct for that before bucketing.
+ *
+ *   Asia:      22:00–07:59 UTC
+ *   London:    08:00–12:59 UTC
+ *   New York:  13:00–21:59 UTC
+ */
+function detectSession(
+  timeStr: string,
+  serverOffsetHours: number = 2
+): 'Asia' | 'London' | 'New York' {
+  if (!timeStr) return 'London';
+
+  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 'London';
+
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+
+  hour = hour - serverOffsetHours;
+  if (hour < 0) hour += 24;
+  if (hour >= 24) hour -= 24;
+
+  const timeDecimal = hour + minute / 60;
+
+  if (timeDecimal >= 8 && timeDecimal < 13) return 'London';
+  if (timeDecimal >= 13 && timeDecimal < 22) return 'New York';
+  return 'Asia';
+}
+
 // --- Firebase ---
 import { initializeApp } from 'firebase/app';
 import { 
@@ -1686,22 +1720,51 @@ If no anomaly: return exactly the word NULL`}]
 
   const updateTrade = async (id: string, tradeData: any) => {
     if (!user) return;
-    
-    // Normalize data for Firestore
-    const { id: _, userId: __, createdAt: ___, ...updatePayload } = tradeData;
+
     const normalized = {
-      ...updatePayload,
-      entry: cleanMoney(tradeData.entry),
-      exit: cleanMoney(tradeData.exit),
-      lot: cleanMoney(tradeData.lot),
+      type: tradeData.type || 'trade',
+      date: tradeData.date,
       pnl: cleanMoney(tradeData.pnl),
-      sl: tradeData.sl ? cleanMoney(tradeData.sl) : null,
-      tp: tradeData.tp ? cleanMoney(tradeData.tp) : null,
+      session: tradeData.session || 'Unknown',
+      killZone: tradeData.killZone || 'None',
+      emotion: tradeData.emotion || 'Calm',
+      notes: tradeData.notes || '',
+      tags: tradeData.tags || [],
+
+      symbol: tradeData.symbol || tradeData.pair || null,
+      direction: tradeData.direction || tradeData.dir || null,
+      entryPrice: tradeData.entryPrice !== undefined ? cleanMoney(tradeData.entryPrice) : (tradeData.entry !== undefined ? cleanMoney(tradeData.entry) : null),
+      exitPrice: tradeData.exitPrice !== undefined ? cleanMoney(tradeData.exitPrice) : (tradeData.exit !== undefined ? cleanMoney(tradeData.exit) : null),
+      stopLoss: tradeData.stopLoss !== undefined ? cleanMoney(tradeData.stopLoss) : (tradeData.sl !== undefined ? cleanMoney(tradeData.sl) : null),
+      takeProfit: tradeData.takeProfit !== undefined ? cleanMoney(tradeData.takeProfit) : (tradeData.tp !== undefined ? cleanMoney(tradeData.tp) : null),
+      lotSize: tradeData.lotSize !== undefined ? cleanMoney(tradeData.lotSize) : (tradeData.lot !== undefined ? cleanMoney(tradeData.lot) : null),
+      setup: tradeData.setup || null,
+      riskReward: tradeData.riskReward || null,
+      result: tradeData.result ? tradeData.result.toUpperCase() : null,
+
+      recapSummary: tradeData.recapSummary || null,
+      tradeCount: tradeData.tradeCount ? Number(tradeData.tradeCount) : null,
+      wins: tradeData.wins ? Number(tradeData.wins) : null,
+      losses: tradeData.losses ? Number(tradeData.losses) : null,
+
+      pair: tradeData.symbol || tradeData.pair || null,
+      dir: tradeData.direction || tradeData.dir || null,
+      entry: tradeData.entryPrice !== undefined ? cleanMoney(tradeData.entryPrice) : (tradeData.entry !== undefined ? cleanMoney(tradeData.entry) : null),
+      exit: tradeData.exitPrice !== undefined ? cleanMoney(tradeData.exitPrice) : (tradeData.exit !== undefined ? cleanMoney(tradeData.exit) : null),
+      sl: tradeData.stopLoss !== undefined ? cleanMoney(tradeData.stopLoss) : (tradeData.sl !== undefined ? cleanMoney(tradeData.sl) : null),
+      tp: tradeData.takeProfit !== undefined ? cleanMoney(tradeData.takeProfit) : (tradeData.tp !== undefined ? cleanMoney(tradeData.tp) : null),
+      lot: tradeData.lotSize !== undefined ? cleanMoney(tradeData.lotSize) : (tradeData.lot !== undefined ? cleanMoney(tradeData.lot) : null),
+      currency: tradeData.currency || 'USD',
+      plan: tradeData.plan || 'no',
+      news: tradeData.news || 'no',
+      dur: tradeData.dur || '',
+      reason: tradeData.reason || '',
+      ss: tradeData.ss || '',
+
       updatedAt: serverTimestamp(),
     };
 
     if (id.startsWith('temp-')) {
-      // Optimistic/Local-only update for temporary trades
       setTrades(prev => prev.map(t => t.id === id ? { ...t, ...normalized, updatedAt: new Date().toISOString() } : t));
       showToast('Temporary trade updated locally');
       setIsEditingTrade(false);
@@ -1710,13 +1773,10 @@ If no anomaly: return exactly the word NULL`}]
     }
 
     const path = `users/${user.uid}/trades/${id}`;
-    
+
     try {
       await updateDoc(doc(db, path), normalized);
-      
-      // Update local state immediately for better UX - use ISO string for local state compatibility
       setTrades(prev => prev.map(t => t.id === id ? { ...t, ...normalized, updatedAt: new Date().toISOString() } : t));
-      
       showToast('Trade updated successfully');
       setIsEditingTrade(false);
       setSelectedTrade(null);
@@ -4227,6 +4287,8 @@ function TradeForm({ initialData, onSubmit, buttonLabel = "Log Trade", displayCu
   const [isAutoLot, setIsAutoLot] = useState(!initialData);
   const [step, setStep] = useState(1);
 
+  const isImportedTrade = initialData?.plan === 'imported' || initialData?.reason === 'MT5 History Export';
+
   const expandNotes = async () => {
     if (!form.notes) return;
     setIsExpanding(true);
@@ -4387,6 +4449,7 @@ Note: ${notes}`
   }, [initialData, displayCurrency]);
 
   useEffect(() => {
+    if (isImportedTrade) return;
     if (form.time) {
       const hour = parseInt(form.time.split(':')[0]);
       let session: 'Asia' | 'London' | 'New York' = 'New York';
@@ -4398,7 +4461,7 @@ Note: ${notes}`
         setForm(prev => ({ ...prev, session }));
       }
     }
-  }, [form.time]);
+  }, [form.time, isImportedTrade]);
 
   const riskCalculation = useMemo(() => {
     const entry = parseFloat(form.entry);
@@ -4459,6 +4522,7 @@ Note: ${notes}`
   }, [form.exit]); // recalculate when exit price is filled in
 
   useEffect(() => {
+    if (isImportedTrade) return;
     const entry = parseFloat(form.entry);
     const exit = parseFloat(form.exit);
     const lot = parseFloat(form.lot);
@@ -4490,7 +4554,7 @@ Note: ${notes}`
         };
       });
     }
-  }, [form.entry, form.exit, form.lot, form.dir, form.pair, form.currency]);
+  }, [form.entry, form.exit, form.lot, form.dir, form.pair, form.currency, isImportedTrade]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4971,6 +5035,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency, existingTrades }: 
   const [rawRowsForAI, setRawRowsForAI] = useState<any[] | null>(null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [accountCurrency, setAccountCurrency] = useState(displayCurrency);
+  const [mt5ServerOffsetHours, setMt5ServerOffsetHours] = useState(2);
 
   const finalizeImport = (validTrades: any[]) => {
     if (validTrades.length === 0) {
@@ -5103,7 +5168,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency, existingTrades }: 
 currency: accountCurrency,
           result: profit > 0.0001 ? 'win' : (profit < -0.0001 ? 'loss' : 'be'),
           setup: aiMapping ? 'AI Smart Import' : 'MT5 Import',
-          session: 'London',
+          session: detectSession(formattedTime, mt5ServerOffsetHours),
           emotion: 'Neutral',
           notes: `${row[notesKey!] || ''} (MT5 ticket ${row[ticketKey || ''] || 'N/A'})`.trim(),
           news: 'no',
@@ -5201,7 +5266,7 @@ currency: accountCurrency,
         currency:  accountCurrency,
         result:    profit > 0 ? 'win' : profit < 0 ? 'loss' : 'be',
         setup:     'MT5 Import',
-        session:   'London',
+        session:   detectSession(formattedTime, mt5ServerOffsetHours),
         emotion:   'Neutral',
         notes:     `Position ID: ${row[1] ?? 'N/A'}`,
         news:      'no',
@@ -5329,7 +5394,7 @@ currency: accountCurrency,
               currency: accountCurrency,
               result: netProfit > 0.0001 ? 'win' : (netProfit < -0.0001 ? 'loss' : 'be'),
               setup: 'MT5 HTML Import',
-              session: 'London',
+              session: detectSession(formattedTime, mt5ServerOffsetHours),
               emotion: 'Neutral',
               notes: `${getVal(['comment', 'notes']) || ''} (MT5 Import)`.trim(),
               news: 'no',
