@@ -1,5 +1,4 @@
-import { CURRENCIES } from '../constants';
-
+import { CURRENCIES, PAIR_CONFIG } from '../constants';
 // --- Live Rate Cache ---
 let rateCache: Record<string, number> = {};
 let lastFetched: number = 0;
@@ -167,8 +166,6 @@ export const cleanMoney = (val: any): number => {
 };
 
 import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR } from './lib/utils';
-
-import { PAIR_CONFIG } from '../constants';
 
 export function calcRR(
   trade: {
