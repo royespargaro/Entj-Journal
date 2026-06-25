@@ -1519,7 +1519,7 @@ TRADE DETAILS:
 
     const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
 const avgRRValue = avgRR(trades, 'actual');
-const avgRR = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
+const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
     const sorted = [...tradesWithUsdPnl].sort((a, b) => b.usdPnl - a.usdPnl);
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
@@ -1632,7 +1632,7 @@ const avgRR = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
       ? getArchetype(behavioralDiscipline, currentStreak, revengeTradeCount, winRateVal, archetypeAvgRR)
       : null;
 
-    return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline, archetype };
+   return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR: avgRRStat, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline, archetype };
   }, [trades, appRules]);
 
   const addTrade = async (tradeData: any) => {
