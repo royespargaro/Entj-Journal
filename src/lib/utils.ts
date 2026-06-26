@@ -1,3 +1,162 @@
+import { CURRENCIES, PAIR_CONFIG } from '../constants';
+
+// --- Live Rate Cache ---
+let rateCache: Record<string, number> = {};
+let lastFetched: number = 0;
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
+const fetchLiveRates = async (): Promise<Record<string, number>> => {
+  try {
+    const response = await fetch('https://api.frankfurter.app/latest?from=USD');
+    if (!response.ok) throw new Error('Rate fetch failed');
+    const data = await response.json();
+    const rates: Record<string, number> = { USD: 1, ...data.rates };
+    return rates;
+  } catch (e) {
+    console.warn('Live rate fetch failed, using static fallback', e);
+    return {};
+  }
+};
+
+const getLiveRates = async (): Promise<Record<string, number>> => {
+  const now = Date.now();
+  if (Object.keys(rateCache).length > 0 && now - lastFetched < CACHE_DURATION) {
+    return rateCache;
+  }
+  const rates = await fetchLiveRates();
+  if (Object.keys(rates).length > 0) {
+    rateCache = rates;
+    lastFetched = now;
+  }
+  return rateCache;
+};
+
+// Initialize rates on app load
+getLiveRates();
+
+// --- Sync conversion using cached rates (fallback to static) ---
+export const convertCurrency = (amount: number, from: string, to: string): number => {
+  if (from === to) return amount;
+  if (!amount || isNaN(amount)) return 0;
+
+  if (Object.keys(rateCache).length > 0) {
+    const fromRate = rateCache[from] ?? null;
+    const toRate = rateCache[to] ?? null;
+
+    if (fromRate && toRate) {
+      const inUsd = amount / fromRate;
+      return inUsd * toRate;
+    }
+  }
+
+  const fromRate = CURRENCIES[from as keyof typeof CURRENCIES]?.rate || 1;
+  const toRate = CURRENCIES[to as keyof typeof CURRENCIES]?.rate || 1;
+  const inUsd = amount / fromRate;
+  return inUsd * toRate;
+};
+
+export const convertCurrencyLive = async (amount: number, from: string, to: string): Promise<number> => {
+  if (from === to) return amount;
+  if (!amount || isNaN(amount)) return 0;
+
+  const rates = await getLiveRates();
+
+  const fromRate = rates[from] ?? CURRENCIES[from as keyof typeof CURRENCIES]?.rate ?? 1;
+  const toRate = rates[to] ?? CURRENCIES[to as keyof typeof CURRENCIES]?.rate ?? 1;
+
+  const inUsd = amount / fromRate;
+  return inUsd * toRate;
+};
+
+export const refreshRates = async (): Promise<boolean> => {
+  try {
+    const rates = await fetchLiveRates();
+    if (Object.keys(rates).length > 0) {
+      rateCache = rates;
+      lastFetched = Date.now();
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+export const getRate = (from: string, to: string): number => {
+  if (from === to) return 1;
+  const fromRate = rateCache[from] ?? CURRENCIES[from as keyof typeof CURRENCIES]?.rate ?? 1;
+  const toRate = rateCache[to] ?? CURRENCIES[to as keyof typeof CURRENCIES]?.rate ?? 1;
+  return toRate / fromRate;
+};
+
+export const formatNum = (val: any, decimals: number = 2) => {
+  if (val === undefined || val === null || val === '') return '0.00';
+  const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/,/g, ''));
+  if (isNaN(n)) return '0.00';
+  return n.toLocaleString(undefined, { 
+    minimumFractionDigits: decimals, 
+    maximumFractionDigits: decimals 
+  });
+};
+
+export const formatCurrency = (val: any, currency: string = 'USD') => {
+  const meta = (CURRENCIES as any)[currency] || CURRENCIES.USD;
+  const n = typeof val === 'number' ? val : parseFloat(String(val).replace(/,/g, '')) || 0;
+  const absVal = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+
+  if (currency === 'IDR' || currency === 'IDC') {
+    return `${sign}${meta.symbol}${Math.round(absVal).toLocaleString('id-ID')}`;
+  }
+
+  if (meta.isCent) {
+    return `${sign}${meta.symbol}${formatNum(absVal, 2)}`;
+  }
+
+  return `${sign}${meta.symbol}${formatNum(absVal, 2)}`;
+};
+
+export const cleanMoney = (val: any): number => {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  
+  let s = String(val).trim();
+  s = s.replace(/[−–—]/g, '-');
+  s = s.replace(/\s+/g, ''); 
+  
+  if (s.startsWith('(') && s.endsWith(')')) {
+    s = '-' + s.substring(1, s.length - 1);
+  }
+  
+  if (s.includes(',') && !s.includes('.')) {
+    s = s.replace(',', '.');
+  } else if (s.includes(',') && s.includes('.')) {
+    if (s.lastIndexOf(',') < s.lastIndexOf('.')) {
+      s = s.replace(/,/g, '');
+    } else {
+      s = s.replace(/\./g, '').replace(',', '.');
+    }
+  } else if (s.includes(',')) {
+    s = s.replace(/,/g, '');
+  }
+
+  if (s.endsWith('-')) {
+    s = '-' + s.substring(0, s.length - 1);
+  }
+
+  const cleaned = s.replace(/[^\d.\-]/g, '');
+  const hasMinus = cleaned.startsWith('-');
+  const numericPart = cleaned.replace(/-/g, '');
+  const dotParts = numericPart.split('.');
+  let normalizedNumeric = dotParts[0];
+  if (dotParts.length > 1) {
+    normalizedNumeric += '.' + dotParts.slice(1).join('');
+  }
+  
+  const parsed = parseFloat((hasMinus ? '-' : '') + normalizedNumeric);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
 /**
  * Get a fallback risk estimate when no SL is available.
  * Uses a percentage of entry price (1%) or minimum pip value.
@@ -115,4 +274,76 @@ export function calcRR(
   }
 
   return null;
+}
+
+export function avgRR(
+  trades: any[],
+  type: 'planned' | 'actual' = 'actual'
+): number | null {
+  if (!trades || trades.length === 0) return null;
+
+  const values = trades
+    .map(t => calcRR(t, type))
+    .filter((r): r is NonNullable<ReturnType<typeof calcRR>> =>
+      r !== null && 
+      isFinite(r.value) && 
+      Math.abs(r.value) < 100 &&
+      r.value !== 0
+    )
+    .map(r => r.value);
+
+  if (!values.length) return null;
+  
+  const sum = values.reduce((a, b) => a + b, 0);
+  return sum / values.length;
+}
+
+/**
+ * Get detailed RR statistics including breakdown by trade.
+ */
+export function getRRStats(
+  trades: any[],
+  type: 'planned' | 'actual' = 'actual'
+): {
+  average: number | null;
+  total: number;
+  byMethod: Record<string, { count: number; avg: number; sum: number }>;
+  values: number[];
+} {
+  const results = trades
+    .map(t => calcRR(t, type))
+    .filter((r): r is NonNullable<ReturnType<typeof calcRR>> =>
+      r !== null && isFinite(r.value) && Math.abs(r.value) < 100
+    );
+
+  const values = results.map(r => r.value);
+  const byMethod: Record<string, { count: number; avg: number; sum: number }> = {};
+  
+  results.forEach(r => {
+    const method = r.method || 'unknown';
+    if (!byMethod[method]) byMethod[method] = { count: 0, avg: 0, sum: 0 };
+    byMethod[method].count++;
+    byMethod[method].sum += r.value;
+    byMethod[method].avg = byMethod[method].sum / byMethod[method].count;
+  });
+
+  return {
+    average: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null,
+    total: values.length,
+    byMethod,
+    values
+  };
+}
+
+/**
+ * Get a human-readable description of a trade's RR calculation method.
+ */
+export function getRRMethodLabel(method: string | null): string {
+  switch (method) {
+    case 'sl': return 'Stop Loss';
+    case 'inferred': return 'Inferred from PnL';
+    case 'manual_exit': return 'Manual Exit';
+    case 'fallback': return 'Estimated (1% Risk)';
+    default: return 'Unknown';
+  }
 }
