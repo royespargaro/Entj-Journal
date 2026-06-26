@@ -10,6 +10,8 @@ const fetchLiveRates = async (): Promise<Record<string, number>> => {
     const response = await fetch('https://api.frankfurter.app/latest?from=USD');
     if (!response.ok) throw new Error('Rate fetch failed');
     const data = await response.json();
+    // Frankfurter returns rates relative to USD
+    // Add USD itself
     const rates: Record<string, number> = { USD: 1, ...data.rates };
     return rates;
   } catch (e) {
@@ -39,22 +41,26 @@ export const convertCurrency = (amount: number, from: string, to: string): numbe
   if (from === to) return amount;
   if (!amount || isNaN(amount)) return 0;
 
+  // Try live cached rates first
   if (Object.keys(rateCache).length > 0) {
     const fromRate = rateCache[from] ?? null;
     const toRate = rateCache[to] ?? null;
 
     if (fromRate && toRate) {
+      // Convert: amount in 'from' → USD → 'to'
       const inUsd = amount / fromRate;
       return inUsd * toRate;
     }
   }
 
+  // Fallback to static rates from constants
   const fromRate = CURRENCIES[from as keyof typeof CURRENCIES]?.rate || 1;
   const toRate = CURRENCIES[to as keyof typeof CURRENCIES]?.rate || 1;
   const inUsd = amount / fromRate;
   return inUsd * toRate;
 };
 
+// --- Async version for when you need guaranteed live rates ---
 export const convertCurrencyLive = async (amount: number, from: string, to: string): Promise<number> => {
   if (from === to) return amount;
   if (!amount || isNaN(amount)) return 0;
@@ -68,6 +74,7 @@ export const convertCurrencyLive = async (amount: number, from: string, to: stri
   return inUsd * toRate;
 };
 
+// --- Hook for React components to trigger rate refresh ---
 export const refreshRates = async (): Promise<boolean> => {
   try {
     const rates = await fetchLiveRates();
@@ -82,6 +89,7 @@ export const refreshRates = async (): Promise<boolean> => {
   }
 };
 
+// --- Get current rate for display ---
 export const getRate = (from: string, to: string): number => {
   if (from === to) return 1;
   const fromRate = rateCache[from] ?? CURRENCIES[from as keyof typeof CURRENCIES]?.rate ?? 1;
@@ -109,6 +117,7 @@ export const formatCurrency = (val: any, currency: string = 'USD') => {
     return `${sign}${meta.symbol}${Math.round(absVal).toLocaleString('id-ID')}`;
   }
 
+  // Cent accounts — show with cent symbol and 2 decimals
   if (meta.isCent) {
     return `${sign}${meta.symbol}${formatNum(absVal, 2)}`;
   }
@@ -157,120 +166,53 @@ export const cleanMoney = (val: any): number => {
   return isNaN(parsed) ? 0 : parsed;
 };
 
-/**
- * Get a fallback risk estimate when no SL is available.
- * Uses a percentage of entry price (1%) or minimum pip value.
- */
-function getFallbackRisk(entry: number, pair?: string): number {
-  if (!entry) return 10; // Default 10 pips
-  
-  const config = PAIR_CONFIG[(pair || '') as keyof typeof PAIR_CONFIG];
-  const multiplier = config?.multiplier || 1;
-  
-  // Use 1% of entry price as fallback risk
-  const percentRisk = Math.abs(entry) * 0.01;
-  const minRisk = 10 * multiplier; // Minimum 10 pips
-  
-  return Math.max(percentRisk, minRisk);
-}
-
 export function calcRR(
   trade: {
     entry?: number | string;
-    exit?: number | string;
-    sl?: number | string;
-    tp?: number | string;
-    dir?: string;
-    pnl?: number | string;
-    lot?: number | string;
-    pair?: string;
-    currency?: string;
+    exit?:  number | string;
+    sl?:    number | string;
+    tp?:    number | string;
+    dir?:   string;
+    pnl?:   number | string;
+    lot?:   number | string;
+    pair?:  string;
   },
   type: 'planned' | 'actual' = 'actual'
-): { value: number; method: 'sl' | 'inferred' | 'manual_exit' | 'fallback' | null } | null {
+): { value: number; method: 'sl' | 'inferred' | null } | null {
 
-  const entry = Number(trade.entry) || 0;
-  const exit = Number(trade.exit) || 0;
-  const sl = Number(trade.sl) || 0;
-  const tp = Number(trade.tp) || 0;
-  const pnlValue = cleanMoney(trade.pnl);
-  const lot = Number(trade.lot) || 0;
-  const isLong = trade.dir === 'Long';
-  const config = PAIR_CONFIG[(trade.pair || '') as keyof typeof PAIR_CONFIG];
+  const entry      = Number(trade.entry)  || 0;
+  const exit       = Number(trade.exit)   || 0;
+  const sl         = Number(trade.sl)     || 0;
+  const tp         = Number(trade.tp)     || 0;
+  const pnl        = cleanMoney(trade.pnl);
+  const lot        = Number(trade.lot)    || 0;
+  const isLong     = trade.dir === 'Long';
+  const config     = PAIR_CONFIG[(trade.pair || '') as keyof typeof PAIR_CONFIG];
   const multiplier = config?.multiplier || 1;
 
-  // --- VALIDATION ---
-  if (!entry) return null;
-  
-  // For 'actual' type, we need exit OR pnl+lot
-  if (type === 'actual' && !exit && (!pnlValue || !lot)) return null;
-  
-  // For 'planned' type, we need TP and SL
-  if (type === 'planned' && (!tp || !sl)) return null;
+  if (!entry || !exit) return null;
 
-  // --- CALCULATE ACTUAL REWARD (if exit exists) ---
-  const rewardPrice = exit ? (isLong ? (exit - entry) : (entry - exit)) : 0;
+  const rewardPrice = isLong ? (exit - entry) : (entry - exit);
 
-  // --- PRIORITY 1: SL is available (most accurate) ---
+  // Method 1 — SL is stored
   if (sl && sl !== entry) {
     const riskPrice = Math.abs(entry - sl);
     if (riskPrice === 0) return null;
 
-    // Planned RR: Use TP for reward
     if (type === 'planned' && tp && tp !== entry) {
       const plannedReward = isLong ? (tp - entry) : (entry - tp);
       if (plannedReward <= 0) return null;
       return { value: plannedReward / riskPrice, method: 'sl' };
     }
 
-    // Actual RR: Use actual exit for reward
-    if (type === 'actual' && exit) {
-      return { value: rewardPrice / riskPrice, method: 'sl' };
-    }
-    
-    // If actual but no exit, but we have pnl+lot
-    if (type === 'actual' && pnlValue && lot) {
-      const pnlInPips = pnlValue / (lot * multiplier);
-      const rewardInPips = isLong ? pnlInPips : -pnlInPips;
-      if (rewardInPips > 0) {
-        return { value: rewardInPips / (riskPrice / multiplier), method: 'sl' };
-      } else {
-        // Losing trade with SL = -1R exactly
-        return { value: -1, method: 'sl' };
-      }
-    }
+    return { value: rewardPrice / riskPrice, method: 'sl' };
   }
 
-  // --- PRIORITY 2: NO SL — Infer from PnL + Lot ---
-  if (type === 'actual' && pnlValue && lot) {
-    const pnlInPips = pnlValue / (lot * multiplier);
-    
-    // If we have exit, calculate reward directly
-    if (exit && rewardPrice !== 0) {
-      // Losing trade: we know exactly how much was risked
-      if (pnlValue < 0) {
-        // The risk was exactly the loss amount
-        return { value: -1, method: 'inferred' };
-      }
-      
-      // Winning trade without SL: use fallback risk
-      const fallbackRisk = getFallbackRisk(entry, trade.pair);
-      const riskPrice = fallbackRisk * multiplier;
-      return { value: rewardPrice / riskPrice, method: 'fallback' };
-    }
-    
-    // No exit, but we have PnL and lot
-    // Losing trade: always -1R
-    if (pnlValue < 0) {
-      return { value: -1, method: 'inferred' };
-    }
-    
-    // Winning trade without exit: use fallback
-    const fallbackRisk = getFallbackRisk(entry, trade.pair);
-    const riskPrice = fallbackRisk * multiplier;
-    // Estimate reward from PnL
-    const estimatedReward = Math.abs(pnlInPips) * multiplier;
-    return { value: estimatedReward / riskPrice, method: 'fallback' };
+  // Method 2 — Infer risk from PnL + lot
+  if (type === 'actual' && pnl && lot) {
+    const inferredRisk = Math.abs(pnl) / (lot * multiplier);
+    if (inferredRisk === 0) return null;
+    return { value: rewardPrice / inferredRisk, method: 'inferred' };
   }
 
   return null;
@@ -280,70 +222,13 @@ export function avgRR(
   trades: any[],
   type: 'planned' | 'actual' = 'actual'
 ): number | null {
-  if (!trades || trades.length === 0) return null;
-
   const values = trades
     .map(t => calcRR(t, type))
     .filter((r): r is NonNullable<ReturnType<typeof calcRR>> =>
-      r !== null && 
-      isFinite(r.value) && 
-      Math.abs(r.value) < 100 &&
-      r.value !== 0
+      r !== null && isFinite(r.value) && Math.abs(r.value) < 50
     )
     .map(r => r.value);
 
   if (!values.length) return null;
-  
-  const sum = values.reduce((a, b) => a + b, 0);
-  return sum / values.length;
-}
-
-/**
- * Get detailed RR statistics including breakdown by trade.
- */
-export function getRRStats(
-  trades: any[],
-  type: 'planned' | 'actual' = 'actual'
-): {
-  average: number | null;
-  total: number;
-  byMethod: Record<string, { count: number; avg: number; sum: number }>;
-  values: number[];
-} {
-  const results = trades
-    .map(t => calcRR(t, type))
-    .filter((r): r is NonNullable<ReturnType<typeof calcRR>> =>
-      r !== null && isFinite(r.value) && Math.abs(r.value) < 100
-    );
-
-  const values = results.map(r => r.value);
-  const byMethod: Record<string, { count: number; avg: number; sum: number }> = {};
-  
-  results.forEach(r => {
-    const method = r.method || 'unknown';
-    if (!byMethod[method]) byMethod[method] = { count: 0, avg: 0, sum: 0 };
-    byMethod[method].count++;
-    byMethod[method].sum += r.value;
-    byMethod[method].avg = byMethod[method].sum / byMethod[method].count;
-  });
-
-  return {
-    average: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null,
-    total: values.length,
-    byMethod,
-    values
-  };
-}
-
-/**
- * Get a human-readable description of a trade's RR calculation method.
- */
-export function getRRMethodLabel(method: string | null): string {
-  switch (method) {
-    case 'sl': return 'Stop Loss';
-    case 'inferred': return 'Inferred from PnL';
-    case 'manual_exit': return 'Manual Exit';
-    case 'fallback': return 'Estimated (1% Risk)';
-    default: return 'Unknown';
-  }
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
