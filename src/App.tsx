@@ -50,7 +50,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR } from './lib/utils';
+import { 
+  convertCurrency, 
+  formatNum, 
+  formatCurrency, 
+  cleanMoney, 
+  calcRR, 
+  avgRR as computeAvgRR,
+  getRRStats,
+  getRRMethodLabel 
+} from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -1518,8 +1527,30 @@ TRADE DETAILS:
     }));
 
     const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
-const avgRRValue = computeAvgRR(trades, 'actual');
+// --- FIXED: Better RR calculation with detailed stats ---
+const rrStats = getRRStats(trades, 'actual');
+const avgRRValue = rrStats.average;
 const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
+
+// Also calculate planned RR for comparison
+const plannedRRStats = getRRStats(trades, 'planned');
+const plannedRRValue = plannedRRStats.average;
+const plannedRRStat = plannedRRValue !== null ? formatNum(plannedRRValue, 2) : '—';
+
+// Debug: Log how RR is being calculated
+if (trades.length > 0 && avgRRValue !== null) {
+  console.log('RR Stats:', {
+    actual: {
+      avg: avgRRValue,
+      total: rrStats.total,
+      byMethod: rrStats.byMethod
+    },
+    planned: {
+      avg: plannedRRValue,
+      total: plannedRRStats.total
+    }
+  });
+}
     const sorted = [...tradesWithUsdPnl].sort((a, b) => b.usdPnl - a.usdPnl);
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
@@ -1632,7 +1663,25 @@ const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
       ? getArchetype(behavioralDiscipline, currentStreak, revengeTradeCount, winRateVal, archetypeAvgRR)
       : null;
 
-   return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR: avgRRStat, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline, archetype };
+   return { 
+  n, 
+  wins, 
+  losses, 
+  pnl: totalUsdPnl, 
+  planFollowed, 
+  newsSlHits, 
+  avgRR: avgRRStat,
+  plannedRR: plannedRRStat, // ← ADD THIS
+  rrStats: rrStats, // ← ADD THIS (for debugging/detailed view)
+  best, 
+  worst, 
+  psychologyMap, 
+  sessionAnalytics, 
+  expectancy, 
+  projection, 
+  behavioralDiscipline, 
+  archetype 
+};
   }, [trades, appRules]);
 
   const addTrade = async (tradeData: any) => {
@@ -2264,6 +2313,36 @@ If no anomaly: return exactly the word NULL`}]
                   </div>
                 );
               })()}
+
+              {/* --- RR Details (add this after Trade Quality Score) --- */}
+{(() => {
+  const rrResult = calcRR(selectedTrade, 'actual');
+  if (!rrResult) return null;
+  return (
+    <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4 mb-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[9px] font-black uppercase text-spotify-muted tracking-widest">RR Calculation</p>
+        <span className="text-[10px] font-black text-spotify-muted">
+          Method: {getRRMethodLabel(rrResult.method)}
+        </span>
+      </div>
+      <p className="text-2xl font-black text-white mt-1">
+        1:{rrResult.value.toFixed(2)}
+      </p>
+      {rrResult.method === 'fallback' && (
+        <p className="text-[9px] text-yellow-400/60 mt-1 italic">
+          ⚠️ Estimated using 1% risk fallback (no SL recorded)
+        </p>
+      )}
+      {rrResult.method === 'inferred' && rrResult.value === -1 && (
+        <p className="text-[9px] text-red-400/60 mt-1 italic">
+          📉 Loss trade: -1R (exact risk known from PnL)
+        </p>
+      )}
+    </div>
+  );
+})()}
+              
               <div className="grid grid-cols-2 gap-4">
                 <StatItem label="Date" value={selectedTrade.date} />
 <StatItem label="Time" value={selectedTrade.time} />
@@ -2607,9 +2686,14 @@ const todayStats = useMemo(() => {
               </div>
               <div className="w-px h-8 bg-white/10" />
               <div>
-                <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Avg R:R</p>
-                <p className="text-2xl font-black tracking-tighter text-white">{stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`}</p>
-              </div>
+  <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Realized R:R</p>
+  <p className="text-2xl font-black tracking-tighter text-white">{stats.avgRR === '—' ? '—' : `1:${stats.avgRR}`}</p>
+  {stats.plannedRR && stats.plannedRR !== '—' && (
+    <p className="text-[8px] text-white/20 mt-1">
+      Planned: 1:{stats.plannedRR}
+    </p>
+  )}
+</div>
             </div>
           </div>
           <div className="hidden md:block w-px bg-white/5 my-8" />
