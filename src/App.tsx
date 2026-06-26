@@ -1529,17 +1529,28 @@ TRADE DETAILS:
     const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
 // --- FIXED: Better RR calculation with detailed stats ---
 const rrStats = getRRStats(trades, 'actual');
-const rrStats = getRRStats(trades, 'actual');
 const avgRRValue = rrStats.average;
 const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
 
-const plannedRRStats = getRRStats(trades, 'planned');
-const plannedRRValue = plannedRRStats.average;
-const plannedRRStat = plannedRRValue !== null ? formatNum(plannedRRValue, 2) : '—';
 // Also calculate planned RR for comparison
-const plannedRRStats = getRRStats(trades, 'planned');
-const plannedRRValue = plannedRRStats.average;
-const plannedRRStat = plannedRRValue !== null ? formatNum(plannedRRValue, 2) : '—';
+const plannedRRStatsResult = getRRStats(trades, 'planned');
+const plannedRRAverage = plannedRRStatsResult.average;
+const plannedRRDisplay = plannedRRAverage !== null ? formatNum(plannedRRAverage, 2) : '—';
+
+// Debug: Log how RR is being calculated
+if (trades.length > 0 && avgRRValue !== null) {
+  console.log('RR Stats:', {
+    actual: {
+      avg: avgRRValue,
+      total: rrStats.total,
+      byMethod: rrStats.byMethod
+    },
+    planned: {
+      avg: plannedRRAverage,
+      total: plannedRRStatsResult.total
+    }
+  });
+}
 
 // Debug: Log how RR is being calculated
 if (trades.length > 0 && avgRRValue !== null) {
@@ -1675,7 +1686,7 @@ if (trades.length > 0 && avgRRValue !== null) {
   planFollowed, 
   newsSlHits, 
   avgRR: avgRRStat,
-  plannedRR: plannedRRStat,
+  plannedRR: plannedRRDisplay,
   rrStats: rrStats,
   best, 
   worst, 
