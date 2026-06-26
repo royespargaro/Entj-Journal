@@ -1677,8 +1677,7 @@ if (trades.length > 0 && avgRRValue !== null) {
     const archetype = trades.length > 0
       ? getArchetype(behavioralDiscipline, currentStreak, revengeTradeCount, winRateVal, archetypeAvgRR)
       : null;
-
-  return { 
+return { 
   n, 
   wins, 
   losses, 
@@ -1686,7 +1685,7 @@ if (trades.length > 0 && avgRRValue !== null) {
   planFollowed, 
   newsSlHits, 
   avgRR: avgRRStat,
-  plannedRR: plannedRRDisplay,
+  plannedRR: plannedRRDisplay,   // <-- this should be plannedRRDisplay
   rrStats: rrStats,
   best, 
   worst, 
