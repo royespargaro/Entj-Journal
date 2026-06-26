@@ -1529,9 +1529,13 @@ TRADE DETAILS:
     const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
 // --- FIXED: Better RR calculation with detailed stats ---
 const rrStats = getRRStats(trades, 'actual');
+const rrStats = getRRStats(trades, 'actual');
 const avgRRValue = rrStats.average;
 const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
 
+const plannedRRStats = getRRStats(trades, 'planned');
+const plannedRRValue = plannedRRStats.average;
+const plannedRRStat = plannedRRValue !== null ? formatNum(plannedRRValue, 2) : '—';
 // Also calculate planned RR for comparison
 const plannedRRStats = getRRStats(trades, 'planned');
 const plannedRRValue = plannedRRStats.average;
@@ -1663,7 +1667,7 @@ if (trades.length > 0 && avgRRValue !== null) {
       ? getArchetype(behavioralDiscipline, currentStreak, revengeTradeCount, winRateVal, archetypeAvgRR)
       : null;
 
-   return { 
+  return { 
   n, 
   wins, 
   losses, 
@@ -1671,8 +1675,8 @@ if (trades.length > 0 && avgRRValue !== null) {
   planFollowed, 
   newsSlHits, 
   avgRR: avgRRStat,
-  plannedRR: plannedRRStat, // ← ADD THIS
-  rrStats: rrStats, // ← ADD THIS (for debugging/detailed view)
+  plannedRR: plannedRRStat,
+  rrStats: rrStats,
   best, 
   worst, 
   psychologyMap, 
