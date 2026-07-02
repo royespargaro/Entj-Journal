@@ -50,7 +50,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_R, DEFAULT_BE_THRESHOLD_MONEY } from './lib/utils';
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_R, DEFAULT_BE_THRESHOLD_MONEY, withComputed } from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -1502,7 +1502,7 @@ Return ONLY a JSON object in this exact format:
 TRADE DETAILS:
 - Pair: ${trade.pair}
 - Direction: ${trade.dir}
-- Result: ${trade.result}
+- Result: ${trade.computed?.result ?? trade.result}
 - P&L: ${trade.pnl} ${trade.currency || 'USD'}
 - Setup: ${trade.setup}
 - Session: ${trade.session}
@@ -1552,11 +1552,14 @@ TRADE DETAILS:
     const noRiskData = getNoRiskDataStats(trades);
     const rewardCapture = calcRewardCaptureRatio(trades);
 
-    // Classify every trade (R-based, falls back to $ threshold)
-    // Default BE thresholds — wire up to Settings later if you want these user-configurable
-     const beThresholdR = beThresholds.r;
+    // Single source of truth for Win/BE/Loss — every display in the app
+    // (History table, Calendar, trade modal, Analytics, Habits win-rates)
+    // should read `_classification.result` off these, not the raw
+    // Firestore `result` field, which is stale/inconsistent.
+    const beThresholdR = beThresholds.r;
     const beThresholdMoney = beThresholds.money;
-    const classifications = trades.map((t: any) => classifyTrade(t, beThresholdR, beThresholdMoney));
+   const computedTrades = withComputed(trades, beThresholdR, beThresholdMoney);
+    const classifications = computedTrades.map((t: any) => t.computed);
     const winCount = classifications.filter(c => c.result === 'WIN').length;
     const beCount = classifications.filter(c => c.result === 'BREAKEVEN').length;
     const lossCount = classifications.filter(c => c.result === 'LOSS').length;
@@ -1690,6 +1693,7 @@ TRADE DETAILS:
      rewardCaptureMedian: rewardCapture.median,
      rewardCaptureSamples: rewardCapture.count,
      beThresholdR, beThresholdMoney,
+     computedTrades, // trades tagged with .computed — pass down to History/Calendar/Analytics/AI prompts/Export
    };
   }, [trades, appRules, beThresholds]);
 
@@ -2134,7 +2138,7 @@ If no anomaly: return exactly the word NULL`}]
             {activePage === 'dashboard' && (
               <DashboardPage 
   stats={stats} 
-  trades={trades} 
+  trades={stats.computedTrades ?? trades}
   onTradeClick={setSelectedTrade} 
   displayCurrency={displayCurrency} 
   setActivePage={setActivePage} 
@@ -2160,7 +2164,7 @@ If no anomaly: return exactly the word NULL`}]
             )}
             {activePage === 'history' && (
               <HistoryPage 
-                trades={trades} 
+                trades={stats.computedTrades ?? trades}
                 filter={filter} 
                 setFilter={setFilter} 
                 startDate={startDate}
@@ -2180,15 +2184,13 @@ If no anomaly: return exactly the word NULL`}]
               />
             )}
             {activePage === 'calendar' && (
-              <CalendarPage trades={trades} displayCurrency={displayCurrency} />
-            )}
+              <CalendarPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} />
+            )}            
             {activePage === 'habits' && (
               <HabitsPage trades={trades} displayCurrency={displayCurrency} stats={stats} />
             )}
        {activePage === 'analytics' && (
-              <AnalyticsPage trades={trades} displayCurrency={displayCurrency} stats={stats} beThresholds={beThresholds} onSaveBeThresholds={saveBeThresholds} />
-            )}
-            {activePage === 'review' && (
+              <AnalyticsPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} stats={stats} beThresholds={beThresholds} onSaveBeThresholds={saveBeThresholds} />            )}            {activePage === 'review' && (
               <ReviewPage reviews={reviews} onDeleteReview={deleteReview} trades={trades} />
             )}
             {activePage === 'daily-plan' && (
@@ -2329,7 +2331,7 @@ If no anomaly: return exactly the word NULL`}]
 <StatItem label="Entry" value={formatNum(selectedTrade.entry || 0)} mono />
 <StatItem label="Exit" value={formatNum(selectedTrade.exit || 0)} mono />
 <StatItem label="P&L" value={formatCurrency(convertCurrency(cleanMoney(selectedTrade.pnl || 0), selectedTrade.currency || 'USD', displayCurrency), displayCurrency)} color={selectedTrade.pnl >= 0 ? 'text-spotify-green' : 'text-red-500'} bold />
-<StatItem label="Result" value={selectedTrade.result?.toUpperCase()} />
+<StatItem label="Result" value={selectedTrade.computed?.result ?? selectedTrade.result?.toUpperCase()} />
 <StatItem label="Setup" value={selectedTrade.setup} />
               </div>
 
@@ -2616,22 +2618,7 @@ const todayStats = useMemo(() => {
  return (
     <div className="space-y-6 animate-in fade-in duration-700 slide-in-from-bottom-2">
 
-      {/* ═══ TIER 1 — HEALTH STRIP (glanceable) ═══ */}
-      {stats.n > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Net P&L', value: `${stats.pnl >= 0 ? '+' : ''}${formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}`, color: stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500' },
-            { label: 'Win Rate', value: `${stats.n ? Math.round(stats.wins / stats.n * 100) : 0}%`, color: 'text-white' },
-            { label: 'SL Coverage', value: `${stats.n ? Math.round(((stats.n - (stats.noRiskDataCount ?? 0)) / stats.n) * 100) : 0}%`, color: (stats.noRiskDataCount ?? 0) === 0 ? 'text-spotify-green' : 'text-yellow-400' },
-            { label: 'Coverage', value: `${stats.analyticsCoveragePct ?? 0}%`, color: (stats.analyticsCoveragePct ?? 0) >= 80 ? 'text-spotify-green' : 'text-yellow-400' },
-          ].map(m => (
-            <div key={m.label} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
-              <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">{m.label}</p>
-              <p className={`text-xl font-black tracking-tighter ${m.color}`}>{m.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ═══ HERO — Greeting + Portfolio ═══ */}
 
       {/* ═══ HERO — Greeting + Portfolio ═══ */}
       <div className="relative overflow-hidden rounded-3xl bg-spotify-card border border-white/5">
@@ -6686,8 +6673,8 @@ function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDa
     }
 
     // Filter by type/direction
-    if (filter === 'win') result = result.filter((t: any) => t.result?.toLowerCase() === 'win');
-else if (filter === 'loss') result = result.filter((t: any) => t.result?.toLowerCase() === 'loss');
+    if (filter === 'win') result = result.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN');
+else if (filter === 'loss') result = result.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'LOSS');</br>
     else if (filter === 'short') result = result.filter((t: any) => t.dir === 'Short');
     else if (filter === 'long') result = result.filter((t: any) => t.dir === 'Long');
 
@@ -6917,13 +6904,17 @@ if (endDate) {
                     </div>
                   </td>
                   <td className="px-3 md:px-5 py-4 text-center">
-                    <span className={`text-[9px] font-extrabold px-3 py-1 rounded-full uppercase tracking-tighter ${
-                      t.result === 'WIN' ? 'bg-spotify-green text-black shadow-[0_0_10px_rgba(29,185,84,0.3)]' : t.result === 'LOSS' ? 'bg-red-500 text-white' : 'bg-white/10 text-white'
-                    }`}>
-                      {t.result}
-                    </span>
-                  </td>
-                  <td className="px-3 md:px-5 py-4 text-right flex items-center justify-end gap-2">
+                    {(() => {
+                      const label = t.computed?.result ?? t.result?.toUpperCase();
+                      return (
+                        <span className={`text-[9px] font-extrabold px-3 py-1 rounded-full uppercase tracking-tighter ${
+                          label === 'WIN' ? 'bg-spotify-green text-black shadow-[0_0_10px_rgba(29,185,84,0.3)]' : label === 'LOSS' ? 'bg-red-500 text-white' : 'bg-white/10 text-white'
+                        }`}>
+                          {label === 'BREAKEVEN' ? 'BE' : label}
+                        </span>
+                      );
+                    })()}
+                  </td>                  <td className="px-3 md:px-5 py-4 text-right flex items-center justify-end gap-2">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleShareTrade(t); }}
                       className="p-2 text-spotify-muted hover:text-spotify-green hover:bg-spotify-green/10 rounded-full transition-all"
@@ -7054,7 +7045,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
       return d.getFullYear() === viewYear && d.getMonth() === viewMonth;
   });
   const monthUsdPnl = monthTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-  const winRate = monthTrades.length > 0 ? (monthTrades.filter((t:any) => t.result === 'WIN').length / monthTrades.length) * 100 : 0;
+  const winRate = monthTrades.length > 0 ? (monthTrades.filter((t:any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN').length / monthTrades.length) * 100 : 0;
   
   const dailyPnls = monthTrades.reduce((acc: any, t: any) => {
     const dKey = getLocalDateKey(t.closeDate || t.date);
@@ -7144,7 +7135,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
                             const isToday = dateKey === getLocalDateKey(new Date());
                             const dayTrades = trades.filter((t: any) => getLocalDateKey(t.closeDate || t.date) === dateKey);
                             const pnl = dayTrades.reduce((s: number, t: any) => s + convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD'), 0);
-                            const winRate = dayTrades.length > 0 ? (dayTrades.filter((t:any) => t.result === 'WIN').length / dayTrades.length) * 100 : 0;
+                            const winRate = dayTrades.length > 0 ? (dayTrades.filter((t:any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN').length / dayTrades.length) * 100 : 0;
                             
                             const bg = !d.isCurrentMonth ? 'bg-transparent' : 
                                          pnl >= 100 ? 'bg-spotify-green/20' : 
@@ -7225,9 +7216,9 @@ function CalendarPage({ trades, displayCurrency }: any) {
                   <div key={t.id} className="bg-white/5 hover:bg-white/[0.08] p-4 rounded-xl border border-white/5 flex items-center justify-between transition-colors">
                     <div className="flex items-center gap-4">
                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-[10px] ${
-  t.result === 'WIN' || t.result === 'win'
+  (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN'
     ? 'bg-spotify-green/20 text-spotify-green'
-    : t.result === 'LOSS' || t.result === 'loss'
+    : (t.computed?.result ?? t.result?.toUpperCase()) === 'LOSS'
     ? 'bg-red-500/20 text-red-500'
     : 'bg-yellow-500/20 text-yellow-500'
 }`}>
@@ -7280,7 +7271,7 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
     const sessions = ['Asia', 'London', 'New York'];
     const sessionData = sessions.map(s => {
       const ts = tradesWithUsdPnl.filter((t: any) => t.session === s);
-      const wins = ts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length;
+      const wins = ts.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN').length;
       const grossProfit = ts.filter((t: any) => t.usdPnl > 0).reduce((s: number, t: any) => s + t.usdPnl, 0);
       const grossLoss = Math.abs(ts.filter((t: any) => t.usdPnl < 0).reduce((s: number, t: any) => s + t.usdPnl, 0));
       const pf = sanitize(grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0);
@@ -7299,8 +7290,8 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
     // Direction
     const shorts = tradesWithUsdPnl.filter((t: any) => t.dir?.toLowerCase() === 'short');
     const longs = tradesWithUsdPnl.filter((t: any) => t.dir?.toLowerCase() === 'long');
-    const swr = shorts.length ? sanitize(Math.round(shorts.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / shorts.length * 100)) : 0;
-    const lwr = longs.length ? sanitize(Math.round(longs.filter((t: any) => t.result?.toUpperCase() === 'WIN').length / longs.length * 100)) : 0;
+    const swr = shorts.length ? sanitize(Math.round(shorts.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN').length / shorts.length * 100)) : 0;
+    const lwr = longs.length ? sanitize(Math.round(longs.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN').length / longs.length * 100)) : 0;
 
     // Emotions
     const emotionsMap: any = {};
@@ -7309,7 +7300,7 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
       if (!emotionsMap[e]) emotionsMap[e] = { win: 0, total: 0, pnl: 0 };
       emotionsMap[e].total++;
       emotionsMap[e].pnl += toUsd(t);
-      if (t.result?.toUpperCase() === 'WIN') emotionsMap[e].win++;
+      if ((t.computed?.result ?? t.result?.toUpperCase()) === 'WIN') emotionsMap[e].win++;
     });
     const emotionData = Object.entries(emotionsMap).map(([name, data]: any) => ({
       name,
@@ -7325,7 +7316,7 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
       if (!setupsMap[t.setup]) setupsMap[t.setup] = { win: 0, total: 0, pnl: 0 };
       setupsMap[t.setup].total++;
       setupsMap[t.setup].pnl += toUsd(t);
-      if (t.result?.toUpperCase() === 'WIN') setupsMap[t.setup].win++;
+      if ((t.computed?.result ?? t.result?.toUpperCase()) === 'WIN') setupsMap[t.setup].win++;
     });
     const setupPerformanceData = Object.entries(setupsMap).map(([name, data]: any) => ({
       name,
@@ -7363,8 +7354,9 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
     const sortedByDate = [...trades].sort((a: any, b: any) => a.date.localeCompare(b.date));
     let maxConsecWins = 0, maxConsecLosses = 0, curWins = 0, curLosses = 0;
     sortedByDate.forEach((t: any) => {
-      if (t.result?.toUpperCase() === 'WIN') { curWins++; curLosses = 0; maxConsecWins = Math.max(maxConsecWins, curWins); }
-      else if (t.result?.toUpperCase() === 'LOSS') { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
+      const label = t.computed?.result ?? t.result?.toUpperCase();
+      if (label === 'WIN') { curWins++; curLosses = 0; maxConsecWins = Math.max(maxConsecWins, curWins); }
+      else if (label === 'LOSS') { curLosses++; curWins = 0; maxConsecLosses = Math.max(maxConsecLosses, curLosses); }
       else { curWins = 0; curLosses = 0; }
     });
 
@@ -7636,8 +7628,27 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
           </div>
         </div>
 
-          {/* ── DATA QUALITY STRIP ── */}
-        <div className="relative z-10 mt-6 pt-6 border-t border-white/5 grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* ── CLASSIFICATION BREAKDOWN (Win / BE / Loss) ── */}
+        <div className="relative z-10 mt-6 pt-6 border-t border-white/5 grid grid-cols-3 gap-4">
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5 text-center">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Wins</p>
+            <p className="text-lg font-black text-spotify-green">{stats.winCount ?? 0}</p>
+            <p className="text-[9px] text-white/20 mt-1">{stats.n ? Math.round((stats.winCount ?? 0) / stats.n * 100) : 0}%</p>
+          </div>
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5 text-center">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Break-even</p>
+            <p className="text-lg font-black text-white/60">{stats.beCount ?? 0}</p>
+            <p className="text-[9px] text-white/20 mt-1">{stats.n ? Math.round((stats.beCount ?? 0) / stats.n * 100) : 0}%</p>
+          </div>
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5 text-center">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Losses</p>
+            <p className="text-lg font-black text-red-400">{stats.lossCount ?? 0}</p>
+            <p className="text-[9px] text-white/20 mt-1">{stats.n ? Math.round((stats.lossCount ?? 0) / stats.n * 100) : 0}%</p>
+          </div>
+        </div>
+
+        {/* ── DATA QUALITY STRIP ── */}
+        <div className="relative z-10 mt-4 pt-4 border-t border-white/5 grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-black/20 rounded-2xl p-4 border border-white/5">
             <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Structured Trades</p>
             <p className="text-lg font-black text-white">{stats.structuredTradeCount ?? '—'}</p>
@@ -7913,9 +7924,7 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
                 if (matrix[e] && matrix[e][s] !== undefined) {
                   const pnl = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
                   matrix[e][s].pnl += pnl; matrix[e][s].count++;
-                  if (t.result?.toUpperCase() === 'WIN') matrix[e][s].wins++;
-                }
-              });
+                  if ((t.computed?.result ?? t.result?.toUpperCase()) === 'WIN') { matrix[e][s].wins++; }              });
               const allPnls = emotions.flatMap(e => sessions.map(s => matrix[e][s].pnl));
               const maxPnl = Math.max(...allPnls, 1);
               const minPnl = Math.min(...allPnls, -1);

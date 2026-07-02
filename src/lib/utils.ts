@@ -471,3 +471,47 @@ export function calcRewardCaptureRatio(
 
 export const DEFAULT_BE_THRESHOLD_R = 0.10;
 export const DEFAULT_BE_THRESHOLD_MONEY = 1;
+
+// Tags every trade with a classification derived from classifyTrade(),
+// as `._classification`. Use this everywhere a WIN/BE/LOSS label or a
+// win-rate % is shown, instead of the stale stored `result` field
+// (which was set at log/import time using a different, hardcoded rule).
+export type TradeComputed = {
+  result: "WIN" | "BREAKEVEN" | "LOSS";
+  method: "r_based" | "monetary_fallback";
+  realizedR: number | null;
+  plannedRR: number | null;
+  structured: boolean; // false = "No Risk Data" (no valid SL)
+};
+
+// Single source of truth for every derived trade value. Nothing about
+// a trade's Win/Loss/BE label, R-multiples, or "structured" status
+// should ever be read from a stored Firestore field — always from here.
+export function withComputed<T extends { entry?: any; exit?: any; sl?: any; tp?: any; dir?: any; pnl?: any }>(
+  trades: T[],
+  beThresholdR: number = DEFAULT_BE_THRESHOLD_R,
+  beThresholdMoney: number = DEFAULT_BE_THRESHOLD_MONEY
+): (T & { computed: TradeComputed })[] {
+  return trades.map(t => {
+    const classification = classifyTrade(t, beThresholdR, beThresholdMoney);
+    const planned = calcRR(t, "planned");
+    const entry = Number(t.entry);
+    const sl = Number(t.sl);
+    const structured = !!(entry && !isNaN(entry) && sl && !isNaN(sl) && sl !== entry);
+
+    return {
+      ...t,
+      computed: {
+        result: classification.result,
+        method: classification.method,
+        realizedR: classification.realizedR,
+        plannedRR: planned.valid ? planned.value : null,
+        structured,
+      },
+    };
+  });
+}
+
+// Backward-compat alias during migration — remove once no callers reference it
+export const withClassification = withComputed;
+</br>
