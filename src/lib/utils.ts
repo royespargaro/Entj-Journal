@@ -165,70 +165,309 @@ export const cleanMoney = (val: any): number => {
   const parsed = parseFloat((hasMinus ? '-' : '') + normalizedNumeric);
   return isNaN(parsed) ? 0 : parsed;
 };
+export type RRResult = {
+  value: number | null;
+  method: "planned" | "realized" | null;
+  valid: boolean;
+  reason?:
+    | "missing_entry"
+    | "missing_exit"
+    | "missing_sl"
+    | "missing_tp"
+    | "invalid";
+};
 
 export function calcRR(
   trade: {
     entry?: number | string;
-    exit?:  number | string;
-    sl?:    number | string;
-    tp?:    number | string;
-    dir?:   string;
-    pnl?:   number | string;
-    lot?:   number | string;
-    pair?:  string;
+    exit?: number | string;
+    sl?: number | string;
+    tp?: number | string;
+    dir?: string;
   },
-  type: 'planned' | 'actual' = 'actual'
-): { value: number; method: 'sl' | 'inferred' | null } | null {
+  type: "planned" | "actual" = "actual"
+): RRResult {
 
-  const entry      = Number(trade.entry)  || 0;
-  const exit       = Number(trade.exit)   || 0;
-  const sl         = Number(trade.sl)     || 0;
-  const tp         = Number(trade.tp)     || 0;
-  const pnl        = cleanMoney(trade.pnl);
-  const lot        = Number(trade.lot)    || 0;
-  const isLong     = trade.dir === 'Long';
-  const config     = PAIR_CONFIG[(trade.pair || '') as keyof typeof PAIR_CONFIG];
-  const multiplier = config?.multiplier || 1;
+  const entry = Number(trade.entry);
+  const exit = Number(trade.exit);
+  const sl = Number(trade.sl);
+  const tp = Number(trade.tp);
 
-  if (!entry || !exit) return null;
+  const isLong = trade.dir === "Long";
 
-  const rewardPrice = isLong ? (exit - entry) : (entry - exit);
+  if (!entry || isNaN(entry)) {
+    return {
+      value: null,
+      method: null,
+      valid: false,
+      reason: "missing_entry",
+    };
+  }
 
-  // Method 1 — SL is stored
-  if (sl && sl !== entry) {
-    const riskPrice = Math.abs(entry - sl);
-    if (riskPrice === 0) return null;
+  // --------------------
+  // Planned RR
+  // --------------------
 
-    if (type === 'planned' && tp && tp !== entry) {
-      const plannedReward = isLong ? (tp - entry) : (entry - tp);
-      if (plannedReward <= 0) return null;
-      return { value: plannedReward / riskPrice, method: 'sl' };
+  if (type === "planned") {
+
+    if (!sl || sl === entry) {
+      return {
+        value: null,
+        method: null,
+        valid: false,
+        reason: "missing_sl",
+      };
     }
 
-    return { value: rewardPrice / riskPrice, method: 'sl' };
+    if (!tp || tp === entry) {
+      return {
+        value: null,
+        method: null,
+        valid: false,
+        reason: "missing_tp",
+      };
+    }
+
+    const risk = Math.abs(entry - sl);
+    const reward = Math.abs(tp - entry);
+
+    if (risk <= 0 || reward <= 0) {
+      return {
+        value: null,
+        method: null,
+        valid: false,
+        reason: "invalid",
+      };
+    }
+
+    return {
+      value: reward / risk,
+      method: "planned",
+      valid: true,
+    };
   }
 
-  // Method 2 — Infer risk from PnL + lot
-  if (type === 'actual' && pnl && lot) {
-    const inferredRisk = Math.abs(pnl) / (lot * multiplier);
-    if (inferredRisk === 0) return null;
-    return { value: rewardPrice / inferredRisk, method: 'inferred' };
+  // --------------------
+  // Realized RR
+  // --------------------
+
+  if (!exit || isNaN(exit)) {
+    return {
+      value: null,
+      method: null,
+      valid: false,
+      reason: "missing_exit",
+    };
   }
 
-  return null;
+  if (!sl || sl === entry) {
+    return {
+      value: null,
+      method: null,
+      valid: false,
+      reason: "missing_sl",
+    };
+  }
+
+  const risk = Math.abs(entry - sl);
+
+  if (risk <= 0) {
+    return {
+      value: null,
+      method: null,
+      valid: false,
+      reason: "invalid",
+    };
+  }
+
+  const reward = isLong
+    ? exit - entry
+    : entry - exit;
+
+  const rr = reward / risk;
+
+  return {
+    value: Number(rr.toFixed(2)),
+    method: "realized",
+    valid: true,
+  };
 }
-
 export function avgRR(
   trades: any[],
-  type: 'planned' | 'actual' = 'actual'
-): number | null {
-  const values = trades
-    .map(t => calcRR(t, type))
-    .filter((r): r is NonNullable<ReturnType<typeof calcRR>> =>
-      r !== null && isFinite(r.value) && Math.abs(r.value) < 50
-    )
-    .map(r => r.value);
+  type: "planned" | "actual" = "actual"
+) {
 
-  if (!values.length) return null;
-  return values.reduce((a, b) => a + b, 0) / values.length;
+  const results = trades.map(t => calcRR(t, type));
+
+  const valid = results.filter(
+    r =>
+      r.valid &&
+      r.value !== null &&
+      Number.isFinite(r.value)
+  );
+
+  const average =
+    valid.length > 0
+      ? valid.reduce((sum, r) => sum + r.value!, 0) /
+        valid.length
+      : null;
+
+  return {
+
+    average,
+
+    coverage:
+      trades.length === 0
+        ? 0
+        : (valid.length / trades.length) * 100,
+
+    validTrades: valid.length,
+
+    totalTrades: trades.length,
+
+    invalidTrades: trades.length - valid.length,
+
+    missingSL: results.filter(r => r.reason === "missing_sl").length,
+
+    missingTP: results.filter(r => r.reason === "missing_tp").length,
+
+    missingExit: results.filter(r => r.reason === "missing_exit").length,
+
+    invalidDirection: results.filter(r => r.reason === "invalid_direction").length,
+  };
 }
+
+// ============================================================
+// TRADE CLASSIFICATION — Win / Break-even / Loss
+// ============================================================
+// Uses R-based threshold when Realized R is computable.
+// Falls back to a monetary threshold (in the trade's own currency)
+// when SL/Entry/Exit data is incomplete or invalid.
+// ============================================================
+
+export type TradeClassification = {
+  result: "WIN" | "BREAKEVEN" | "LOSS";
+  method: "r_based" | "monetary_fallback";
+  realizedR: number | null;
+};
+
+export function classifyTrade(
+  trade: {
+    entry?: number | string;
+    exit?: number | string;
+    sl?: number | string;
+    tp?: number | string;
+    dir?: string;
+    pnl?: number | string;
+  },
+  beThresholdR: number = 0.10,
+  beThresholdMoney: number = 0
+): TradeClassification {
+  const rr = calcRR(trade, "actual");
+
+  if (rr.valid && rr.value !== null && Number.isFinite(rr.value)) {
+    // R-based classification (preferred — objective, size-independent)
+    if (rr.value > beThresholdR) {
+      return { result: "WIN", method: "r_based", realizedR: rr.value };
+    }
+    if (rr.value < -beThresholdR) {
+      return { result: "LOSS", method: "r_based", realizedR: rr.value };
+    }
+    return { result: "BREAKEVEN", method: "r_based", realizedR: rr.value };
+  }
+
+  // Fallback — monetary threshold (used when no valid SL/risk exists)
+  const pnl = cleanMoney(trade.pnl);
+  if (pnl > beThresholdMoney) {
+    return { result: "WIN", method: "monetary_fallback", realizedR: null };
+  }
+  if (pnl < -beThresholdMoney) {
+    return { result: "LOSS", method: "monetary_fallback", realizedR: null };
+  }
+  return { result: "BREAKEVEN", method: "monetary_fallback", realizedR: null };
+}
+
+// ============================================================
+// NO RISK DATA — trades excluded from R-based analytics
+// ============================================================
+// A trade has "No Risk Data" if Stop Loss is missing/invalid, so
+// Initial Risk cannot be objectively determined. These trades still
+// count toward P&L, equity curve, and trade history — just not R-stats.
+// ============================================================
+
+export function getNoRiskDataStats(trades: any[]) {
+  const noRiskTrades = trades.filter(t => {
+    const entry = Number(t.entry);
+    const sl = Number(t.sl);
+    return !entry || isNaN(entry) || !sl || isNaN(sl) || sl === entry;
+  });
+
+  return {
+    count: noRiskTrades.length,
+    trades: noRiskTrades,
+    percentOfTotal: trades.length > 0 ? (noRiskTrades.length / trades.length) * 100 : 0,
+  };
+}
+
+// ============================================================
+// REWARD CAPTURE RATIO — Realized R / Planned RR
+// ============================================================
+// Only meaningful for WINNING trades (see architecture review —
+// applying this to losers or near-zero Planned RR produces
+// misleading/absurd ratios). Capped to avoid outlier distortion.
+// Returns per-trade values plus a distribution summary, not just
+// a single average, since averaging alone can hide bimodal patterns.
+// ============================================================
+
+export type RewardCaptureResult = {
+  average: number | null;
+  median: number | null;
+  samples: number[];
+  count: number;
+  cappedCount: number; // how many were clipped by the cap
+};
+
+export function calcRewardCaptureRatio(
+  trades: any[],
+  cap: number = 2.0 // clip ratios above 200% capture — still shown but flagged
+): RewardCaptureResult {
+  const samples: number[] = [];
+  let cappedCount = 0;
+
+  trades.forEach(t => {
+    const planned = calcRR(t, "planned");
+    const realized = calcRR(t, "actual");
+
+    if (
+      !planned.valid || planned.value === null ||
+      !realized.valid || realized.value === null ||
+      planned.value <= 0
+    ) return;
+
+    // Only winners — see architecture note above
+    if (realized.value <= 0) return;
+
+    let ratio = realized.value / planned.value;
+    if (ratio > cap) {
+      ratio = cap;
+      cappedCount++;
+    }
+    samples.push(ratio);
+  });
+
+  if (samples.length === 0) {
+    return { average: null, median: null, samples: [], count: 0, cappedCount: 0 };
+  }
+
+  const average = samples.reduce((a, b) => a + b, 0) / samples.length;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+
+  return { average, median, samples, count: samples.length, cappedCount };
+}
+
+export const DEFAULT_BE_THRESHOLD_R = 0.10;
+export const DEFAULT_BE_THRESHOLD_MONEY = 1;

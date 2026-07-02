@@ -50,7 +50,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR } from './lib/utils';
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_R, DEFAULT_BE_THRESHOLD_MONEY } from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -1272,14 +1272,40 @@ const { user, showToast, logout } = useAuth();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
-  const [appRules, setAppRules] = useState<any>(null);
+    const [appRules, setAppRules] = useState<any>(null);
+  const [beThresholds, setBeThresholds] = useState<{ r: number; money: number }>({
+    r: DEFAULT_BE_THRESHOLD_R,
+    money: DEFAULT_BE_THRESHOLD_MONEY,
+  });
 
   useEffect(() => {
     if (!user) return;
     getDoc(doc(db, 'users', user.uid, 'settings', 'rules'))
       .then(snap => { if (snap.exists()) setAppRules(snap.data()); })
       .catch(() => {});
+    getDoc(doc(db, 'users', user.uid, 'settings', 'analyticsThresholds'))
+      .then(snap => {
+        if (snap.exists()) {
+          const d = snap.data();
+          setBeThresholds({
+            r: typeof d.r === 'number' ? d.r : DEFAULT_BE_THRESHOLD_R,
+            money: typeof d.money === 'number' ? d.money : DEFAULT_BE_THRESHOLD_MONEY,
+          });
+        }
+      })
+      .catch(() => {});
   }, [user]);
+
+  const saveBeThresholds = async (r: number, money: number) => {
+    if (!user) return;
+    setBeThresholds({ r, money });
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'settings', 'analyticsThresholds'), { r, money, updatedAt: serverTimestamp() });
+      showToast('Break-even thresholds updated');
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Use prop-based displayCurrency
 
@@ -1517,9 +1543,27 @@ TRADE DETAILS:
       usdPnl: convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD')
     }));
 
-    const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
-const avgRRValue = computeAvgRR(trades, 'actual');
-const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
+       const totalUsdPnl = tradesWithUsdPnl.reduce((sum, t) => sum + t.usdPnl, 0);
+    const realizedRRStats = computeAvgRR(trades, 'actual');
+    const plannedRRStats = computeAvgRR(trades, 'planned');
+    const avgRRValue = realizedRRStats.average;
+    const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
+
+    const noRiskData = getNoRiskDataStats(trades);
+    const rewardCapture = calcRewardCaptureRatio(trades);
+
+    // Classify every trade (R-based, falls back to $ threshold)
+    // Default BE thresholds — wire up to Settings later if you want these user-configurable
+     const beThresholdR = beThresholds.r;
+    const beThresholdMoney = beThresholds.money;
+    const classifications = trades.map((t: any) => classifyTrade(t, beThresholdR, beThresholdMoney));
+    const winCount = classifications.filter(c => c.result === 'WIN').length;
+    const beCount = classifications.filter(c => c.result === 'BREAKEVEN').length;
+    const lossCount = classifications.filter(c => c.result === 'LOSS').length;
+    const structuredTradeCount = trades.length - noRiskData.count;
+    const analyticsCoveragePct = trades.length > 0
+      ? Math.round((structuredTradeCount / trades.length) * 100)
+      : 0;
     const sorted = [...tradesWithUsdPnl].sort((a, b) => b.usdPnl - a.usdPnl);
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
@@ -1632,8 +1676,22 @@ const avgRRStat = avgRRValue !== null ? formatNum(avgRRValue, 2) : '—';
       ? getArchetype(behavioralDiscipline, currentStreak, revengeTradeCount, winRateVal, archetypeAvgRR)
       : null;
 
-   return { n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR: avgRRStat, best, worst, psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline, archetype };
-  }, [trades, appRules]);
+    return {
+     n, wins, losses, pnl: totalUsdPnl, planFollowed, newsSlHits, avgRR: avgRRStat, best, worst,
+     psychologyMap, sessionAnalytics, expectancy, projection, behavioralDiscipline, archetype,
+     // New R-analytics
+     plannedRR: plannedRRStats.average,
+     realizedR: realizedRRStats.average,
+     noRiskDataCount: noRiskData.count,
+     structuredTradeCount,
+     analyticsCoveragePct,
+     winCount, beCount, lossCount,
+     rewardCaptureAvg: rewardCapture.average,
+     rewardCaptureMedian: rewardCapture.median,
+     rewardCaptureSamples: rewardCapture.count,
+     beThresholdR, beThresholdMoney,
+   };
+  }, [trades, appRules, beThresholds]);
 
   const addTrade = async (tradeData: any) => {
     if (!user) return;
@@ -2127,8 +2185,8 @@ If no anomaly: return exactly the word NULL`}]
             {activePage === 'habits' && (
               <HabitsPage trades={trades} displayCurrency={displayCurrency} stats={stats} />
             )}
-            {activePage === 'analytics' && (
-              <AnalyticsPage trades={trades} displayCurrency={displayCurrency} />
+       {activePage === 'analytics' && (
+              <AnalyticsPage trades={trades} displayCurrency={displayCurrency} stats={stats} beThresholds={beThresholds} onSaveBeThresholds={saveBeThresholds} />
             )}
             {activePage === 'review' && (
               <ReviewPage reviews={reviews} onDeleteReview={deleteReview} trades={trades} />
@@ -2555,8 +2613,25 @@ const todayStats = useMemo(() => {
     };
   }, [trades]);
 
-  return (
+ return (
     <div className="space-y-6 animate-in fade-in duration-700 slide-in-from-bottom-2">
+
+      {/* ═══ TIER 1 — HEALTH STRIP (glanceable) ═══ */}
+      {stats.n > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Net P&L', value: `${stats.pnl >= 0 ? '+' : ''}${formatCurrency(convertCurrency(stats.pnl, 'USD', displayCurrency), displayCurrency)}`, color: stats.pnl >= 0 ? 'text-spotify-green' : 'text-red-500' },
+            { label: 'Win Rate', value: `${stats.n ? Math.round(stats.wins / stats.n * 100) : 0}%`, color: 'text-white' },
+            { label: 'SL Coverage', value: `${stats.n ? Math.round(((stats.n - (stats.noRiskDataCount ?? 0)) / stats.n) * 100) : 0}%`, color: (stats.noRiskDataCount ?? 0) === 0 ? 'text-spotify-green' : 'text-yellow-400' },
+            { label: 'Coverage', value: `${stats.analyticsCoveragePct ?? 0}%`, color: (stats.analyticsCoveragePct ?? 0) >= 80 ? 'text-spotify-green' : 'text-yellow-400' },
+          ].map(m => (
+            <div key={m.label} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+              <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">{m.label}</p>
+              <p className={`text-xl font-black tracking-tighter ${m.color}`}>{m.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ═══ HERO — Greeting + Portfolio ═══ */}
       <div className="relative overflow-hidden rounded-3xl bg-spotify-card border border-white/5">
@@ -7186,7 +7261,9 @@ function CalendarPage({ trades, displayCurrency }: any) {
     </div>
   );
 }
-function AnalyticsPage({ trades, displayCurrency }: any) {
+function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeThresholds }: any) {
+  const [isEditingThresholds, setIsEditingThresholds] = useState(false);
+  const [thresholdDraft, setThresholdDraft] = useState({ r: beThresholds?.r ?? 0.10, money: beThresholds?.money ?? 1 });
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
   const [whatIfFilter, setWhatIfFilter] = useState<{ type: string; value: string } | null>(null);
@@ -7541,7 +7618,7 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
 
           <div className="w-px h-20 bg-white/10 hidden lg:block" />
 
-          {/* Status checks */}
+  {/* Status checks */}
           <div className="space-y-2 min-w-[160px]">
             <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-3">Status</p>
             {[
@@ -7558,8 +7635,70 @@ function AnalyticsPage({ trades, displayCurrency }: any) {
             ))}
           </div>
         </div>
-      </div>
 
+          {/* ── DATA QUALITY STRIP ── */}
+        <div className="relative z-10 mt-6 pt-6 border-t border-white/5 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Structured Trades</p>
+            <p className="text-lg font-black text-white">{stats.structuredTradeCount ?? '—'}</p>
+          </div>
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">No Risk Data</p>
+            <p className={`text-lg font-black ${(stats.noRiskDataCount ?? 0) > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.noRiskDataCount ?? 0}</p>
+          </div>
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Analytics Coverage</p>
+            <p className={`text-lg font-black ${(stats.analyticsCoveragePct ?? 0) >= 80 ? 'text-spotify-green' : 'text-yellow-400'}`}>{stats.analyticsCoveragePct ?? 0}%</p>
+          </div>
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5">
+            <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Avg Reward Capture</p>
+            <p className="text-lg font-black text-white">
+              {stats.rewardCaptureAvg !== null && stats.rewardCaptureAvg !== undefined
+                ? `${Math.round(stats.rewardCaptureAvg * 100)}%`
+                : '—'}
+            </p>
+          </div>
+        </div>
+
+        {/* ── BREAK-EVEN THRESHOLD CONTROL ── */}
+        <div className="relative z-10 mt-4 pt-4 border-t border-white/5">
+          {!isEditingThresholds ? (
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-[10px] font-bold text-white/40">
+                Break-even threshold: <span className="text-white">±{stats.beThresholdR ?? 0.10}R</span>
+                {' '}<span className="text-white/20">(falls back to</span> <span className="text-white">${stats.beThresholdMoney ?? 1}</span> <span className="text-white/20">when R can't be computed)</span>
+              </p>
+              <button onClick={() => { setThresholdDraft({ r: stats.beThresholdR ?? 0.10, money: stats.beThresholdMoney ?? 1 }); setIsEditingThresholds(true); }}
+                className="text-[9px] font-black uppercase tracking-widest text-spotify-green hover:text-white transition-colors">
+                Edit
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-end gap-4 flex-wrap">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">R Threshold</label>
+                <input type="number" step="0.01" min="0" value={thresholdDraft.r}
+                  onChange={e => setThresholdDraft(prev => ({ ...prev, r: parseFloat(e.target.value) || 0 }))}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white w-24 outline-none focus:border-spotify-green" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">$ Fallback</label>
+                <input type="number" step="0.5" min="0" value={thresholdDraft.money}
+                  onChange={e => setThresholdDraft(prev => ({ ...prev, money: parseFloat(e.target.value) || 0 }))}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white w-24 outline-none focus:border-spotify-green" />
+              </div>
+              <button onClick={() => { onSaveBeThresholds?.(thresholdDraft.r, thresholdDraft.money); setIsEditingThresholds(false); }}
+                className="px-4 py-2 bg-spotify-green text-black rounded-lg text-[9px] font-black uppercase tracking-widest">
+                Save
+              </button>
+              <button onClick={() => setIsEditingThresholds(false)}
+                className="px-4 py-2 bg-white/5 text-white/40 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       {/* ── LAYER 2: WHERE DO I MAKE MONEY? ── */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
