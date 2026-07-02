@@ -1317,6 +1317,9 @@ const { user, showToast, logout } = useAuth();
         const stopLoss = Number(data.stopLoss || data.sl || 0);
         const takeProfit = Number(data.takeProfit || data.tp || 0);
         const lotSize = Number(data.lotSize || data.lot || 0);
+        // Legacy field — kept for backward-compat with old docs that still
+        // have it, but new writes no longer set it. Always prefer
+        // `trade.computed.result` (from withComputed()) over this.
         const result = data.result ? (data.result.toLowerCase() === 'win' ? 'WIN' : data.result.toLowerCase() === 'loss' ? 'LOSS' : data.result.toUpperCase() === 'BREAKEVEN' ? 'BREAKEVEN' : null) : null;
             return {
             id: data.id,
@@ -1722,11 +1725,13 @@ TRADE DETAILS:
       stopLoss: tradeData.stopLoss ? cleanMoney(tradeData.stopLoss) : (tradeData.sl ? cleanMoney(tradeData.sl) : null),
       takeProfit: tradeData.takeProfit ? cleanMoney(tradeData.takeProfit) : (tradeData.tp ? cleanMoney(tradeData.tp) : null),
       lotSize: tradeData.lotSize ? cleanMoney(tradeData.lotSize) : (tradeData.lot ? cleanMoney(tradeData.lot) : null),
-      setup: tradeData.setup || null,
+       setup: tradeData.setup || null,
       setupTags: Array.isArray(tradeData.setupTags) ? tradeData.setupTags : (tradeData.setup ? [tradeData.setup] : []),
       riskReward: tradeData.riskReward || null,
-      result: tradeData.result ? tradeData.result.toUpperCase() : null,
-      
+      // result is intentionally NOT stored — it's derived at runtime via
+      // withComputed()/classifyTrade(). Storing it created drift between
+      // Firestore and the UI whenever the BE threshold changed.
+
       // Recap specific fields
       recapSummary: tradeData.recapSummary || null,
       tradeCount: tradeData.tradeCount ? Number(tradeData.tradeCount) : null,
@@ -1800,7 +1805,7 @@ If no anomaly: return exactly the word NULL`}]
       setup: tradeData.setup || null,
       setupTags: Array.isArray(tradeData.setupTags) ? tradeData.setupTags : (tradeData.setup ? [tradeData.setup] : []),
       riskReward: tradeData.riskReward || null,
-      result: tradeData.result ? tradeData.result.toUpperCase() : null,
+      // result intentionally not stored — see addTrade() note
 
       recapSummary: tradeData.recapSummary || null,
       tradeCount: tradeData.tradeCount ? Number(tradeData.tradeCount) : null,
@@ -4144,7 +4149,8 @@ function DailyRecapPage({ onLog, displayCurrency, showToast }: any) {
           pair: form.pairs.join(', '),
           pnl: netPnl,
           date: new Date().toISOString().split('T')[0],
-          result: netPnl >= 0 ? 'WIN' : 'LOSS',
+          // result omitted — recap "type" trades don't have entry/sl so
+          // withComputed() will correctly fall back to $ threshold for these
           type: 'recap',
           recapSummary: form.notes
       });
@@ -5228,7 +5234,7 @@ function MT5ImportModal({ onClose, onImport, displayCurrency, existingTrades }: 
           tp: tp || null,
           pnl: profit,
 currency: accountCurrency,
-          result: profit > 0.0001 ? 'win' : (profit < -0.0001 ? 'loss' : 'be'),
+          // result intentionally omitted — derived at runtime via withComputed()
           setup: aiMapping ? 'AI Smart Import' : 'MT5 Import',
           session: detectSession(formattedTime, mt5ServerOffsetHours),
           emotion: 'Neutral',
@@ -5326,7 +5332,7 @@ currency: accountCurrency,
         tp:        Number(row[7]) || null,
         pnl:       profit,
         currency:  accountCurrency,
-        result:    profit > 0 ? 'win' : profit < 0 ? 'loss' : 'be',
+        // result intentionally omitted — derived at runtime via withComputed()
         setup:     'MT5 Import',
         session:   detectSession(formattedTime, mt5ServerOffsetHours),
         emotion:   'Neutral',
@@ -5452,9 +5458,9 @@ currency: accountCurrency,
               exit: cleanMoney(exitPrice || entryPrice || '0'),
               sl: sl || null,
               tp: tp || null,
-              pnl: netProfit,
+            pnl: netProfit,
               currency: accountCurrency,
-              result: netProfit > 0.0001 ? 'win' : (netProfit < -0.0001 ? 'loss' : 'be'),
+              // result intentionally omitted — derived at runtime via withComputed()
               setup: 'MT5 HTML Import',
               session: detectSession(formattedTime, mt5ServerOffsetHours),
               emotion: 'Neutral',
