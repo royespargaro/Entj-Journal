@@ -7924,7 +7924,9 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
                 if (matrix[e] && matrix[e][s] !== undefined) {
                   const pnl = convertCurrency(cleanMoney(t.pnl), t.currency || 'USD', 'USD');
                   matrix[e][s].pnl += pnl; matrix[e][s].count++;
-                  if ((t.computed?.result ?? t.result?.toUpperCase()) === 'WIN') { matrix[e][s].wins++; }              });
+                  if ((t.computed?.result ?? t.result?.toUpperCase()) === 'WIN') { matrix[e][s].wins++; }
+                }
+              });
               const allPnls = emotions.flatMap(e => sessions.map(s => matrix[e][s].pnl));
               const maxPnl = Math.max(...allPnls, 1);
               const minPnl = Math.min(...allPnls, -1);
