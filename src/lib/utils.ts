@@ -347,44 +347,27 @@ export function avgRR(
 
 export type TradeClassification = {
   result: "WIN" | "BREAKEVEN" | "LOSS";
-  method: "r_based" | "monetary_fallback";
-  realizedR: number | null;
+  method: "monetary";
+  realizedR: number | null; // kept for backward compat with existing callers, always null now
 };
 
+// Pure dollar-amount classification. Anything with |P&L| under the
+// threshold (default $1) is Break-even — this matches manually closing
+// a trade early on a small move rather than letting it run to a clean
+// TP/SL, which is common practice and shouldn't count as a decisive win/loss.
 export function classifyTrade(
-  trade: {
-    entry?: number | string;
-    exit?: number | string;
-    sl?: number | string;
-    tp?: number | string;
-    dir?: string;
-    pnl?: number | string;
-  },
-  beThresholdR: number = 0.10,
-  beThresholdMoney: number = 0
+  trade: { pnl?: number | string },
+  beThresholdMoney: number = 1
 ): TradeClassification {
-  const rr = calcRR(trade, "actual");
-
-  if (rr.valid && rr.value !== null && Number.isFinite(rr.value)) {
-    // R-based classification (preferred — objective, size-independent)
-    if (rr.value > beThresholdR) {
-      return { result: "WIN", method: "r_based", realizedR: rr.value };
-    }
-    if (rr.value < -beThresholdR) {
-      return { result: "LOSS", method: "r_based", realizedR: rr.value };
-    }
-    return { result: "BREAKEVEN", method: "r_based", realizedR: rr.value };
-  }
-
-  // Fallback — monetary threshold (used when no valid SL/risk exists)
   const pnl = cleanMoney(trade.pnl);
+
   if (pnl > beThresholdMoney) {
-    return { result: "WIN", method: "monetary_fallback", realizedR: null };
+    return { result: "WIN", method: "monetary", realizedR: null };
   }
   if (pnl < -beThresholdMoney) {
-    return { result: "LOSS", method: "monetary_fallback", realizedR: null };
+    return { result: "LOSS", method: "monetary", realizedR: null };
   }
-  return { result: "BREAKEVEN", method: "monetary_fallback", realizedR: null };
+  return { result: "BREAKEVEN", method: "monetary", realizedR: null };
 }
 
 // ============================================================
@@ -469,7 +452,6 @@ export function calcRewardCaptureRatio(
   return { average, median, samples, count: samples.length, cappedCount };
 }
 
-export const DEFAULT_BE_THRESHOLD_R = 0.10;
 export const DEFAULT_BE_THRESHOLD_MONEY = 1;
 
 // Tags every trade with a classification derived from classifyTrade(),
@@ -489,12 +471,12 @@ export type TradeComputed = {
 // should ever be read from a stored Firestore field — always from here.
 export function withComputed<T extends { entry?: any; exit?: any; sl?: any; tp?: any; dir?: any; pnl?: any }>(
   trades: T[],
-  beThresholdR: number = DEFAULT_BE_THRESHOLD_R,
   beThresholdMoney: number = DEFAULT_BE_THRESHOLD_MONEY
 ): (T & { computed: TradeComputed })[] {
   return trades.map(t => {
-    const classification = classifyTrade(t, beThresholdR, beThresholdMoney);
+    const classification = classifyTrade(t, beThresholdMoney);
     const planned = calcRR(t, "planned");
+    const realized = calcRR(t, "actual"); // still shown as a stat, just not used for W/L/BE
     const entry = Number(t.entry);
     const sl = Number(t.sl);
     const structured = !!(entry && !isNaN(entry) && sl && !isNaN(sl) && sl !== entry);
@@ -504,13 +486,12 @@ export function withComputed<T extends { entry?: any; exit?: any; sl?: any; tp?:
       computed: {
         result: classification.result,
         method: classification.method,
-        realizedR: classification.realizedR,
+        realizedR: realized.valid ? realized.value : null,
         plannedRR: planned.valid ? planned.value : null,
         structured,
       },
     };
   });
 }
-
 // Backward-compat alias during migration — remove once no callers reference it
 export const withClassification = withComputed;

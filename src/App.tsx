@@ -50,7 +50,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_R, DEFAULT_BE_THRESHOLD_MONEY, withComputed } from './lib/utils';
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_MONEY, withComputed } from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -1273,8 +1273,7 @@ const { user, showToast, logout } = useAuth();
   const [endDate, setEndDate] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
     const [appRules, setAppRules] = useState<any>(null);
-  const [beThresholds, setBeThresholds] = useState<{ r: number; money: number }>({
-    r: DEFAULT_BE_THRESHOLD_R,
+  const [beThresholds, setBeThresholds] = useState<{ money: number }>({
     money: DEFAULT_BE_THRESHOLD_MONEY,
   });
 
@@ -1288,7 +1287,6 @@ const { user, showToast, logout } = useAuth();
         if (snap.exists()) {
           const d = snap.data();
           setBeThresholds({
-            r: typeof d.r === 'number' ? d.r : DEFAULT_BE_THRESHOLD_R,
             money: typeof d.money === 'number' ? d.money : DEFAULT_BE_THRESHOLD_MONEY,
           });
         }
@@ -1296,12 +1294,12 @@ const { user, showToast, logout } = useAuth();
       .catch(() => {});
   }, [user]);
 
-  const saveBeThresholds = async (r: number, money: number) => {
+  const saveBeThresholds = async (money: number) => {
     if (!user) return;
-    setBeThresholds({ r, money });
+    setBeThresholds({ money });
     try {
-      await setDoc(doc(db, 'users', user.uid, 'settings', 'analyticsThresholds'), { r, money, updatedAt: serverTimestamp() });
-      showToast('Break-even thresholds updated');
+      await setDoc(doc(db, 'users', user.uid, 'settings', 'analyticsThresholds'), { money, updatedAt: serverTimestamp() });
+      showToast('Break-even threshold updated');
     } catch (e) {
       console.error(e);
     }
@@ -1559,9 +1557,8 @@ TRADE DETAILS:
     // (History table, Calendar, trade modal, Analytics, Habits win-rates)
     // should read `_classification.result` off these, not the raw
     // Firestore `result` field, which is stale/inconsistent.
-    const beThresholdR = beThresholds.r;
     const beThresholdMoney = beThresholds.money;
-   const computedTrades = withComputed(trades, beThresholdR, beThresholdMoney);
+    const computedTrades = withComputed(trades, beThresholdMoney);
     const classifications = computedTrades.map((t: any) => t.computed);
     const winCount = classifications.filter(c => c.result === 'WIN').length;
     const beCount = classifications.filter(c => c.result === 'BREAKEVEN').length;
@@ -1695,7 +1692,7 @@ TRADE DETAILS:
      rewardCaptureAvg: rewardCapture.average,
      rewardCaptureMedian: rewardCapture.median,
      rewardCaptureSamples: rewardCapture.count,
-     beThresholdR, beThresholdMoney,
+     beThresholdMoney,
      computedTrades, // trades tagged with .computed — pass down to History/Calendar/Analytics/AI prompts/Export
    };
   }, [trades, appRules, beThresholds]);
@@ -6679,8 +6676,9 @@ function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDa
     }
 
     // Filter by type/direction
-    if (filter === 'win') result = result.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN');
+   if (filter === 'win') result = result.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN');
 else if (filter === 'loss') result = result.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'LOSS');
+else if (filter === 'be') result = result.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'BREAKEVEN');
     else if (filter === 'short') result = result.filter((t: any) => t.dir === 'Short');
     else if (filter === 'long') result = result.filter((t: any) => t.dir === 'Long');
 
@@ -6820,8 +6818,8 @@ if (endDate) {
             )}
           </div>
 
-          <div className="w-full sm:w-auto flex gap-1 bg-white/5 p-1 rounded-full border border-white/5 overflow-x-auto no-scrollbar">
-            {['all', 'win', 'loss', 'short', 'long'].map(f => (
+         <div className="w-full sm:w-auto flex gap-1 bg-white/5 p-1 rounded-full border border-white/5 overflow-x-auto no-scrollbar">
+            {['all', 'win', 'loss', 'be', 'short', 'long'].map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -7260,7 +7258,7 @@ function CalendarPage({ trades, displayCurrency }: any) {
 }
 function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeThresholds }: any) {
   const [isEditingThresholds, setIsEditingThresholds] = useState(false);
-  const [thresholdDraft, setThresholdDraft] = useState({ r: beThresholds?.r ?? 0.10, money: beThresholds?.money ?? 1 });
+  const [thresholdDraft, setThresholdDraft] = useState({ money: beThresholds?.money ?? 1 });
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
   const [whatIfFilter, setWhatIfFilter] = useState<{ type: string; value: string } | null>(null);
@@ -7679,13 +7677,13 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
 
         {/* ── BREAK-EVEN THRESHOLD CONTROL ── */}
         <div className="relative z-10 mt-4 pt-4 border-t border-white/5">
-          {!isEditingThresholds ? (
+           {!isEditingThresholds ? (
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-[10px] font-bold text-white/40">
-                Break-even threshold: <span className="text-white">±{stats.beThresholdR ?? 0.10}R</span>
-                {' '}<span className="text-white/20">(falls back to</span> <span className="text-white">${stats.beThresholdMoney ?? 1}</span> <span className="text-white/20">when R can't be computed)</span>
+                Break-even threshold: <span className="text-white">±${stats.beThresholdMoney ?? 1}</span>
+                <span className="text-white/20"> — trades within this range of $0 are counted as break-even</span>
               </p>
-              <button onClick={() => { setThresholdDraft({ r: stats.beThresholdR ?? 0.10, money: stats.beThresholdMoney ?? 1 }); setIsEditingThresholds(true); }}
+              <button onClick={() => { setThresholdDraft({ money: stats.beThresholdMoney ?? 1 }); setIsEditingThresholds(true); }}
                 className="text-[9px] font-black uppercase tracking-widest text-spotify-green hover:text-white transition-colors">
                 Edit
               </button>
@@ -7693,18 +7691,12 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
           ) : (
             <div className="flex items-end gap-4 flex-wrap">
               <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">R Threshold</label>
-                <input type="number" step="0.01" min="0" value={thresholdDraft.r}
-                  onChange={e => setThresholdDraft(prev => ({ ...prev, r: parseFloat(e.target.value) || 0 }))}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white w-24 outline-none focus:border-spotify-green" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">$ Fallback</label>
-                <input type="number" step="0.5" min="0" value={thresholdDraft.money}
+                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">$ Threshold</label>
+                <input type="number" step="0.1" min="0" value={thresholdDraft.money}
                   onChange={e => setThresholdDraft(prev => ({ ...prev, money: parseFloat(e.target.value) || 0 }))}
                   className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white w-24 outline-none focus:border-spotify-green" />
               </div>
-              <button onClick={() => { onSaveBeThresholds?.(thresholdDraft.r, thresholdDraft.money); setIsEditingThresholds(false); }}
+              <button onClick={() => { onSaveBeThresholds?.(thresholdDraft.money); setIsEditingThresholds(false); }}
                 className="px-4 py-2 bg-spotify-green text-black rounded-lg text-[9px] font-black uppercase tracking-widest">
                 Save
               </button>
