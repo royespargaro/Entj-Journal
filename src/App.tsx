@@ -1365,7 +1365,19 @@ const { user, showToast, logout } = useAuth();
   const [dailyGoals, setDailyGoals] = useState<string>('');
   const [activePage, setActivePage] = useState('dashboard');
   const [activeLogTab, setActiveLogTab] = useState('log-trade');
+ EPLACE:
   const [showInsights, setShowInsights] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const today = new Date();
+    if (today.getDate() !== 1) return; // only trigger on the 1st of the month
+    const monthKey = `${today.getFullYear()}-${today.getMonth()}`;
+    const seenKey = `monthly_insights_seen_${monthKey}`;
+    if (localStorage.getItem(seenKey)) return;
+    localStorage.setItem(seenKey, 'true');
+    setShowInsights(true);
+  }, [user]);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -2195,6 +2207,13 @@ If no anomaly: return exactly the word NULL`}]
               <p className="text-[8px] font-black uppercase tracking-widest text-spotify-muted mb-0.5">Ready to Trade</p>
               <p className="text-xs font-bold text-white">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
             </div>
+      <button
+              onClick={() => setIsRulesOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[9px] font-black uppercase tracking-widest text-white/60 hover:text-white hover:border-white/20 transition-all"
+              title="Trading Rules"
+            >
+              <Shield size={12} /> Rules
+            </button>
             {user?.photoURL && (
   <div className="relative">
     <button
@@ -2296,11 +2315,10 @@ If no anomaly: return exactly the word NULL`}]
 
               />
             )}
-            {activePage === 'calendar' && (
-              <CalendarPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} />
+            {/* Calendar is now a view toggle inside History — see HistoryPage viewMode */}
             )}            
-            {activePage === 'habits' && (
-              <HabitsPage trades={trades} displayCurrency={displayCurrency} stats={stats} />
+          {activePage === 'habits' && (
+              <HabitsPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} stats={stats} setActivePage={setActivePage} />
             )}
        {activePage === 'analytics' && (
               <AnalyticsPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} stats={stats} beThresholds={beThresholds} onSaveBeThresholds={saveBeThresholds} />            )}            {activePage === 'review' && (
@@ -5900,7 +5918,7 @@ function BulkEditModal({ isOpen, onClose, onSave, count }: any) {
   );
 }
 
-function HabitsPage({ trades, displayCurrency, stats }: any) {
+function HabitsPage({ trades, displayCurrency, stats, setActivePage }: any) {
   const { user } = useAuth();
   const [rulesPreview, setRulesPreview] = useState<any>(null);
 
@@ -6441,11 +6459,17 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
       {activeTab === 'behavior' && (
       <>
       {/* ── WEEK OVER WEEK ── */}
-      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
+     <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Week over Week</h3>          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-spotify-muted">
-            <div className="w-2 h-2 rounded-full bg-spotify-green animate-pulse" />
-            Live Comparison
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Week over Week</h3>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setActivePage?.('review')} className="text-[9px] font-black uppercase tracking-widest text-spotify-green hover:text-white transition-colors flex items-center gap-1">
+              Weekly Reflection <ChevronRight size={11} />
+            </button>
+            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-spotify-muted">
+              <div className="w-2 h-2 rounded-full bg-spotify-green animate-pulse" />
+              Live Comparison
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -6761,6 +6785,7 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
   );
 }
 function HistoryPage({ trades, filter, setFilter, startDate, setStartDate, endDate, setEndDate, onTradeClick, onDelete, onBulkDelete, onBulkUpdate, onImportOpen, onExportOpen, displayCurrency, setIsEditingTrade, onShareTrade, }: any) {
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -6849,12 +6874,19 @@ if (endDate) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter mb-1">Trade <span className="italic text-spotify-green">History</span></h1>
           <p className="text-xs font-medium text-spotify-muted tracking-tight">Click any row for full technical breakdown.</p>
         </div>
+        <div className="flex items-center gap-1 bg-white/5 border border-white/10 p-1 rounded-full self-start">
+          <button onClick={() => setViewMode('list')} className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'list' ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}>List</button>
+          <button onClick={() => setViewMode('calendar')} className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'calendar' ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}>Calendar</button>
+        </div>
+
+REPLACE_CONTINUES_BELOW
         
+        {viewMode === 'list' && (
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-center">
           <div className="w-full sm:w-auto relative group">
             <input 
@@ -6948,6 +6980,12 @@ if (endDate) {
         </div>
       </div>
 
+      )}
+      </div>
+
+      {viewMode === 'calendar' ? (
+        <CalendarPage trades={trades} displayCurrency={displayCurrency} />
+      ) : (
       <div className="bg-spotify-card rounded-lg overflow-hidden shadow-2xl">
         <div className="p-5 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted">{filteredTrades.length} Trade{filteredTrades.length !== 1 ? 's' : ''}</h2>
@@ -7073,6 +7111,8 @@ if (endDate) {
   >
           Load More Trades
         </button>
+      )}
+      </div>
       )}
 
       <BulkEditModal 
