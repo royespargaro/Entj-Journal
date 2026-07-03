@@ -122,6 +122,8 @@ import {
   getAuth, 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut,
   User,
@@ -159,9 +161,23 @@ const generateTradeFingerprint = (t: any) => {
   return `${date}|${time}|${pair}|${dir}|${entry}|${exit}|${pnl}`;
 };
 
+REPLACE:
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// Popups are unreliable on mobile browsers and almost always fail silently
+// in in-app browsers (Instagram/TikTok/Facebook/WhatsApp webviews) — the
+// popup either gets blocked outright or opens but never hands control back
+// to the parent window, leaving the user stuck on the login screen with no
+// visible error. Redirect-based auth works reliably in all of these cases.
+const isMobileOrWebview = () => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+  const isInAppBrowser = /FBAN|FBAV|Instagram|Line|MicroMessenger|TikTok|Twitter/i.test(ua);
+  return isMobile || isInAppBrowser;
+};
 
 // Firebase Messaging is NOT supported in iOS Safari, most in-app browsers
 // (Instagram/TikTok/Facebook webviews), and some Android browsers.
@@ -999,7 +1015,16 @@ export default function App() {
   };
 
   useEffect(() => {
-   // connection test removed
+    // Handles the return trip from signInWithRedirect(). Must run once on
+    // mount — if this isn't called, the redirect "completes" on Firebase's
+    // side but your app never learns about it, and onAuthStateChanged can
+    // be slow or inconsistent picking it up on some mobile browsers.
+    getRedirectResult(auth).catch((error) => {
+      console.error("Redirect login error:", error);
+      if (error?.code && error.code !== 'auth/no-auth-event') {
+        showToast('Login failed. Please try again.', 'error');
+      }
+    });
 
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -1008,16 +1033,28 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
-
   const login = async () => {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     const provider = new GoogleAuthProvider();
     try {
+      if (isMobileOrWebview()) {
+        // Redirect leaves the page and comes back — onAuthStateChanged
+        // plus the getRedirectResult handler below will pick up the result.
+        await signInWithRedirect(auth, provider);
+        return; // page is navigating away, nothing more to do here
+      }
       await signInWithPopup(auth, provider, browserPopupRedirectResolver);
     } catch (error: any) {
       if (error.code === 'auth/popup-blocked') {
-        showToast('Login popup blocked. Please allow popups.', 'error');
+        // Fall back to redirect if popup got blocked even on desktop
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectError) {
+          console.error("Redirect fallback failed:", redirectError);
+          showToast('Login failed. Please try again.', 'error');
+        }
       } else if (error.code === 'auth/cancelled-popup-request') {
         // Silently handle
       } else {
