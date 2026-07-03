@@ -4348,10 +4348,17 @@ function TradeForm({ initialData, onSubmit, buttonLabel = "Log Trade", displayCu
   const [isSetupPickerOpen, setIsSetupPickerOpen] = useState(false);
   const [validationResult, setValidationResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isAutoLot, setIsAutoLot] = useState(!initialData);
+ const [isAutoLot, setIsAutoLot] = useState(!initialData);
   const [step, setStep] = useState(1);
 
   const isImportedTrade = initialData?.plan === 'imported' || initialData?.reason === 'MT5 History Export';
+
+  // Prevents the auto-P&L-recalc effect from firing on the very first
+  // render when editing an existing trade — otherwise opening any trade
+  // for edit immediately overwrites its real P&L (which may include
+  // commission/swap/slippage not captured by the simple diff*lot*multiplier
+  // formula) the moment the form mounts with the trade's existing values.
+  const skipNextAutoCalc = React.useRef(!!initialData);
 
   const expandNotes = async () => {
     if (!form.notes) return;
@@ -4551,6 +4558,9 @@ Note: ${notes}`
   }, [form.entry, form.sl, form.balance, form.riskPercent, form.pair]);
 
   useEffect(() => {
+    // isAutoLot already defaults to false when initialData is present
+    // (see useState(!initialData) above), so this won't fire on mount
+    // for existing trades unless the user explicitly re-enables the sizer.
     if (isAutoLot && riskCalculation) {
       setForm(prev => {
         if (prev.lot !== riskCalculation.lot) {
@@ -4585,8 +4595,16 @@ Note: ${notes}`
     });
   }, [form.exit]); // recalculate when exit price is filled in
 
-  useEffect(() => {
+ useEffect(() => {
     if (isImportedTrade) return;
+
+    // Skip the first run when opening an existing trade for edit — only
+    // recalc once the user has actually changed entry/exit/lot/dir/pair/currency.
+    if (skipNextAutoCalc.current) {
+      skipNextAutoCalc.current = false;
+      return;
+    }
+
     const entry = parseFloat(form.entry);
     const exit = parseFloat(form.exit);
     const lot = parseFloat(form.lot);
