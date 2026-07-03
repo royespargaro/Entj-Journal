@@ -146,8 +146,7 @@ import {
   getDocFromServer,
   writeBatch,
   
-} from 'firebase/firestore';
-import { getMessaging, getToken } from 'firebase/messaging';
+} from 'firebase/firestore';import { getMessaging, getToken, isSupported as isMessagingSupported } from 'firebase/messaging';
 import firebaseConfig from '../firebase-applet-config.json';
 const generateTradeFingerprint = (t: any) => {
   const date = t.date || '';
@@ -162,8 +161,36 @@ const generateTradeFingerprint = (t: any) => {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const messaging = getMessaging(app);
 export const auth = getAuth(app);
+
+// Firebase Messaging is NOT supported in iOS Safari, most in-app browsers
+// (Instagram/TikTok/Facebook webviews), and some Android browsers.
+// Calling getMessaging(app) directly at module scope throws synchronously
+// in those environments — which crashes the ENTIRE app before React can
+// render anything, producing a blank white screen with no visible error.
+// This lazily initializes messaging only where it's actually supported.
+let _messaging: ReturnType<typeof getMessaging> | null = null;
+let _messagingInitPromise: Promise<ReturnType<typeof getMessaging> | null> | null = null;
+
+export const getMessagingSafe = async () => {
+  if (_messaging) return _messaging;
+  if (_messagingInitPromise) return _messagingInitPromise;
+
+  _messagingInitPromise = isMessagingSupported()
+    .then(supported => {
+      if (!supported) return null;
+      try {
+        _messaging = getMessaging(app);
+        return _messaging;
+      } catch (e) {
+        console.warn('Firebase Messaging unavailable on this device/browser:', e);
+        return null;
+      }
+    })
+    .catch(() => null);
+
+  return _messagingInitPromise;
+};
 
 import { Trade } from './types';
 
@@ -821,6 +848,33 @@ const AuthStatus = () => {
 
 
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('App crashed:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-spotify-black flex flex-col items-center justify-center p-8 text-center gap-4">
+          <p className="text-white font-black text-lg">Something went wrong loading EntJournal</p>
+          <p className="text-white/40 text-xs max-w-sm">{this.state.error?.message || 'Unknown error'}</p>
+          <button onClick={() => window.location.reload()} className="px-6 py-3 bg-spotify-green text-black rounded-full font-black text-xs uppercase tracking-widest">
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -835,8 +889,13 @@ export default function App() {
   });
   
   useEffect(() => {
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
+    if (typeof Notification === 'undefined') return; // Notification API not available on this browser (common on mobile)
+    try {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Notification permission request failed:', e);
     }
   }, []);
 
@@ -854,11 +913,16 @@ export default function App() {
         const utcHours = now.getUTCHours();
         const utcMinutes = now.getUTCMinutes();
         
-        const notify = (key: string, title: string, body: string) => {
+           const notify = (key: string, title: string, body: string) => {
+            if (typeof Notification === 'undefined') return; // not available on this browser
             const storageKey = `notif_${key}_${dateKey}`;
             if (localStorage.getItem(storageKey)) return;
             
-            new Notification(title, { body, icon: '/icon-192.png' });
+            try {
+              new Notification(title, { body, icon: '/icon-192.png' });
+            } catch (e) {
+              console.warn('Failed to show notification:', e);
+            }
             localStorage.setItem(storageKey, 'true');
         };
         
@@ -905,8 +969,11 @@ export default function App() {
     }
   }, []);
 
-  async function registerNotificationToken(userId: string) {
+ async function registerNotificationToken(userId: string) {
   try {
+    const messaging = await getMessagingSafe();
+    if (!messaging) return; // silently skip — device/browser doesn't support push (iOS Safari, in-app browsers, etc.)
+
     const token = await getToken(messaging, { 
       vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY 
     });
@@ -1061,7 +1128,7 @@ export default function App() {
   />
 )}
       
-      <AnimatePresence>
+          <AnimatePresence>
         {toast && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
@@ -1079,6 +1146,14 @@ export default function App() {
     </AuthContext.Provider>
   );
 }
+
+// Wrap the default export with the error boundary
+const AppWithBoundary = () => (
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
+export { AppWithBoundary as AppSafe };
 
 function LoginPage() {
   const { login, loginWithEmail, registerWithEmail, resetPassword } = useAuth();
