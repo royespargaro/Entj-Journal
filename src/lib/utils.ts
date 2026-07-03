@@ -454,6 +454,70 @@ export function calcRewardCaptureRatio(
 
 export const DEFAULT_BE_THRESHOLD_MONEY = 1;
 
+// ============================================================
+// BEHAVIORAL NARRATIVE — turns habit stats into a short story
+// instead of a wall of numbers. Deterministic (no AI call needed);
+// picks the 2-3 most notable patterns and writes them as sentences.
+// ============================================================
+export function generateBehavioralStory(habitStats: {
+  emotionBreakdown: { emotion: string; pnl: number; winRate: number; count: number }[];
+  sessionStats: { session: string; pnl: number; wr: number; count: number }[];
+  pairStats: { pair: string; pnl: number; wr: number; count: number }[];
+  consecutiveLosses: number;
+  revengeTrades: number;
+  overtradeDays: number;
+  weekDelta: { pnl: number; wr: number; discipline: number };
+  thisWeek: { pnl: number; wr: number; discipline: number; count: number };
+}): string[] {
+  const lines: string[] = [];
+
+  // Emotion pattern
+  const worstEmotion = [...habitStats.emotionBreakdown].filter(e => e.count >= 2).sort((a, b) => a.pnl - b.pnl)[0];
+  const bestEmotion = [...habitStats.emotionBreakdown].filter(e => e.count >= 2).sort((a, b) => b.pnl - a.pnl)[0];
+  if (worstEmotion && worstEmotion.pnl < 0) {
+    lines.push(`Trading while "${worstEmotion.emotion}" has cost you the most — ${worstEmotion.count} trades with a ${worstEmotion.winRate}% win rate.`);
+  }
+  if (bestEmotion && bestEmotion.pnl > 0 && bestEmotion.emotion !== worstEmotion?.emotion) {
+    lines.push(`Your best state of mind is "${bestEmotion.emotion}" — that's when your edge actually shows up.`);
+  }
+
+  // Session pattern
+  const bestSession = [...habitStats.sessionStats].sort((a, b) => b.pnl - a.pnl)[0];
+  const worstSession = [...habitStats.sessionStats].filter(s => s.count >= 3).sort((a, b) => a.pnl - b.pnl)[0];
+  if (bestSession && worstSession && bestSession.session !== worstSession.session && worstSession.pnl < 0) {
+    lines.push(`Most of your edge comes from the ${bestSession.session} session, while ${worstSession.session} has been a consistent drag.`);
+  }
+
+  // Pair pattern
+  const bestPair = [...habitStats.pairStats].sort((a, b) => b.pnl - a.pnl)[0];
+  if (bestPair && bestPair.pnl > 0) {
+    lines.push(`${bestPair.pair} is your strongest instrument — ${bestPair.wr}% win rate across ${bestPair.count} trades.`);
+  }
+
+  // Tilt pattern
+  if (habitStats.consecutiveLosses >= 3) {
+    lines.push(`You're currently on a ${habitStats.consecutiveLosses}-loss streak — this is when discipline typically slips.`);
+  }
+  if (habitStats.revengeTrades > 0) {
+    lines.push(`${habitStats.revengeTrades} trade${habitStats.revengeTrades > 1 ? 's were' : ' was'} entered within 15 minutes of a loss — a classic revenge-trading signature.`);
+  }
+
+  // Week trend
+  if (habitStats.thisWeek.count > 0) {
+    if (habitStats.weekDelta.discipline > 5) {
+      lines.push(`Discipline is trending up — ${Math.round(habitStats.weekDelta.discipline)} points better than last week.`);
+    } else if (habitStats.weekDelta.discipline < -5) {
+      lines.push(`Discipline slipped ${Math.abs(Math.round(habitStats.weekDelta.discipline))} points versus last week — worth a reset.`);
+    }
+  }
+
+  if (lines.length === 0) {
+    lines.push('Not enough distinct patterns yet — keep logging trades and your story will sharpen.');
+  }
+
+  return lines.slice(0, 4);
+}
+
 // Tags every trade with a classification derived from classifyTrade(),
 // as `._classification`. Use this everywhere a WIN/BE/LOSS label or a
 // win-rate % is shown, instead of the stale stored `result` field

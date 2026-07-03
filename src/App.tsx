@@ -50,7 +50,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_MONEY, withComputed } from './lib/utils';
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_MONEY, withComputed, generateBehavioralStory } from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -3152,31 +3152,20 @@ const todayStats = useMemo(() => {
             {plan && <button onClick={() => setActivePage('plan')} className="w-full py-4 border border-white/5 rounded-2xl text-[9px] font-black uppercase tracking-widest text-spotify-muted hover:text-white transition-colors">Review Blueprint</button>}
           </div>
 
-          <div className="relative bg-gradient-to-br from-spotify-green/15 via-spotify-green/5 to-transparent border border-spotify-green/30 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px] shadow-[0_8px_40px_rgba(29,185,84,0.1)] overflow-hidden group hover:shadow-[0_8px_50px_rgba(29,185,84,0.18)] hover:border-spotify-green/40 transition-all">
+             <div className="relative bg-gradient-to-br from-spotify-green/15 via-spotify-green/5 to-transparent border border-spotify-green/30 rounded-[2.5rem] p-8 flex flex-col justify-between min-h-[300px] shadow-[0_8px_40px_rgba(29,185,84,0.1)] overflow-hidden group hover:shadow-[0_8px_50px_rgba(29,185,84,0.18)] hover:border-spotify-green/40 transition-all cursor-pointer" onClick={() => setActivePage('habits')}>
             <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-spotify-green/10 rounded-full blur-[80px] pointer-events-none group-hover:bg-spotify-green/20 transition-all duration-700" />
             <div>
-              <p className="text-[10px] font-black text-spotify-green uppercase tracking-[0.3em] mb-6">Psychological Edge</p>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="bg-spotify-green p-3 rounded-2xl text-black"><Brain size={24} /></div>
-                  <div>
-                    <p className="text-[10px] font-black text-spotify-muted uppercase tracking-widest">Current Archetype</p>
-                    <p className="text-xl font-black text-white">{stats.archetype?.persona || 'The Novice'}</p>
-                  </div>
-                </div>
-                <div className="pt-4 space-y-4 border-t border-white/5">
-                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-spotify-muted tracking-widest">
-                    <span>Rule Streak</span>
-                    <span className="text-white flex items-center gap-1"><Zap size={10} className="text-spotify-green" fill="currentColor" />{(() => { let s=0; const sorted=[...trades].sort((a:any,b:any)=>new Date(b.date).getTime()-new Date(a.date).getTime()); for(const t of sorted){if(t.plan==='yes')s++;else break;} return s; })()}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-spotify-muted tracking-widest">
-                    <span>Plan Adherence</span>
-                    <span className="text-white">{stats.behavioralDiscipline ?? 0}%</span>
-                  </div>
+              <p className="text-[10px] font-black text-spotify-green uppercase tracking-[0.3em] mb-6">Trading Health</p>
+              <div className="flex items-center gap-4">
+                <div className="bg-spotify-green p-3 rounded-2xl text-black"><Brain size={24} /></div>
+                <div>
+                  <p className="text-[10px] font-black text-spotify-muted uppercase tracking-widest">Current Archetype</p>
+                  <p className="text-xl font-black text-white">{stats.archetype?.persona || 'The Novice'}</p>
                 </div>
               </div>
+              <p className="text-[10px] text-white/30 mt-4 leading-relaxed">Full behavior breakdown — identity, patterns, discipline, and forecast — lives on the Habits page.</p>
             </div>
-            <button onClick={() => setActivePage('habits')} className="w-full py-4 bg-spotify-green text-black rounded-2xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-all relative z-10">Habit Analysis</button>
+            <button onClick={(e) => { e.stopPropagation(); setActivePage('habits'); }} className="w-full py-4 bg-spotify-green text-black rounded-2xl text-[9px] font-black uppercase tracking-widest hover:scale-[1.02] transition-all relative z-10">Open Habit Analysis →</button>
           </div>
         </div>
       </div>
@@ -6238,11 +6227,40 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
 
   const currentLevelId = parseInt(archetype.level.match(/Lvl (\d+)/)?.[1] || '0');
 
+  const [activeTab, setActiveTab] = useState<'overview' | 'behavior' | 'discipline' | 'growth'>('overview');
+  const [isLadderExpanded, setIsLadderExpanded] = useState(false);
+
+  const behavioralStory = useMemo(() => generateBehavioralStory({
+    emotionBreakdown, sessionStats, pairStats, consecutiveLosses, revengeTrades, overtradeDays, weekDelta, thisWeek
+  }), [emotionBreakdown, sessionStats, pairStats, consecutiveLosses, revengeTrades, overtradeDays, weekDelta, thisWeek]);
+
+  const TABS = [
+    { id: 'overview', label: 'Overview', icon: Brain },
+    { id: 'behavior', label: 'Behavior', icon: Sparkles },
+    { id: 'discipline', label: 'Discipline', icon: ShieldCheck },
+    { id: 'growth', label: 'Growth', icon: TrendingUp },
+  ] as const;
+
   return (
     <div className="space-y-6 pb-24">
 
-      {/* ── HERO ARCHETYPE CARD ── */}
-      <motion.div
+      {/* ── TAB SWITCHER ── */}
+      <div className="flex items-center gap-1 bg-white/5 border border-white/10 p-1 rounded-full w-fit mx-auto md:mx-0">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+              activeTab === tab.id ? 'bg-white text-black' : 'text-white/40 hover:text-white'
+            }`}
+          >
+            <tab.icon size={13} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── HERO ARCHETYPE CARD (always visible — identity anchor) ── */}      <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -6290,9 +6308,26 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
         </div>
       </motion.div>
 
+    {activeTab === 'overview' && (
+      <>
+      {/* ── AI-STYLE BEHAVIORAL STORY ── */}
+      <div className="bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 rounded-3xl p-8">
+        <div className="flex items-center gap-2 mb-5">
+          <Sparkles size={16} className="text-spotify-green" />
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-green">Your Behavioral Story</h3>
+        </div>
+        <div className="space-y-3">
+          {behavioralStory.map((line, i) => (
+            <motion.p key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
+              className="text-sm text-white/70 leading-relaxed">
+              {line}
+            </motion.p>
+          ))}
+        </div>
+      </div>
+
       {/* ── TILT STATUS ── */}
-      {isTilting ? (
-        <motion.div
+      {isTilting ? (        <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           className="relative overflow-hidden rounded-3xl border border-red-500/40 p-6 md:p-8"
@@ -6361,11 +6396,54 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
         </div>
       )}
 
+        {/* ── COMPACT PROGRESSION (Duolingo-style, expandable) ── */}
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{archetype.icon}</span>
+            <div>
+              <p className="text-[9px] font-black text-spotify-muted uppercase tracking-widest">{archetype.level}</p>
+              <p className="text-sm font-black text-white">Next: {archetype.nextLevel}</p>
+            </div>
+          </div>
+          <button onClick={() => setIsLadderExpanded(v => !v)} className="text-[9px] font-black uppercase tracking-widest text-spotify-green hover:text-white transition-colors flex items-center gap-1">
+            {isLadderExpanded ? 'Hide Ladder' : 'View Ladder'} <ChevronRight size={12} className={`transition-transform ${isLadderExpanded ? 'rotate-90' : ''}`} />
+          </button>
+        </div>
+        <div className="mt-3 h-2 bg-white/5 rounded-full overflow-hidden">
+          <motion.div initial={{ width: 0 }} animate={{ width: `${(currentLevelId / 8) * 100}%` }} transition={{ duration: 1 }} className="h-full bg-spotify-green rounded-full" />
+        </div>
+
+        <AnimatePresence>
+          {isLadderExpanded && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+              <div className="mt-6 space-y-2">
+                {ARCHETYPES_LIST.map(stage => {
+                  const isActive = currentLevelId === stage.id;
+                  const isPast = currentLevelId > stage.id;
+                  return (
+                    <div key={stage.id} className={`flex items-center gap-3 p-2.5 rounded-xl ${isActive ? 'bg-white/[0.05] border border-white/10' : ''}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white' : isPast ? 'bg-spotify-green/20' : 'bg-white/5'}`}>
+                        {isPast ? <span className="text-spotify-green text-xs font-black">✓</span> : <span className={isActive ? 'text-sm' : 'text-xs opacity-50'}>{stage.icon}</span>}
+                      </div>
+                      <span className={`text-xs font-bold ${isActive ? 'text-white' : isPast ? 'text-white/30' : 'text-white/15'}`}>{stage.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      </>
+      )}
+
+      {activeTab === 'behavior' && (
+      <>
       {/* ── WEEK OVER WEEK ── */}
       <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Week over Week</h3>
-          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-spotify-muted">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Week over Week</h3>          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-spotify-muted">
             <div className="w-2 h-2 rounded-full bg-spotify-green animate-pulse" />
             Live Comparison
           </div>
@@ -6516,7 +6594,7 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
         )}
       </div>
 
-      {/* ── SETUP PERFORMANCE ── */}
+           {/* ── SETUP PERFORMANCE ── */}
       {setupStats.length > 0 && (
         <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
           <div className="mb-6">
@@ -6545,9 +6623,13 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
         </div>
       )}
 
+   </>
+      )}
+
+      {activeTab === 'discipline' && (
+      <>
       {/* ── KEY RISK METRICS ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">        {[
           { label: 'Avg Win', value: toDisp(avgWin), color: 'text-spotify-green', icon: '📈' },
           { label: 'Avg Loss', value: toDisp(avgLoss), color: 'text-red-400', icon: '📉' },
           { label: 'Exp. Value/Trade', value: toDisp(expectedValue), color: expectedValue >= 0 ? 'text-spotify-green' : 'text-red-400', icon: '⚡' },
@@ -6561,155 +6643,56 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
         ))}
       </div>
 
-      {/* ── ARCHETYPE PROGRESSION LADDER ── */}
+     {/* ── MILESTONE TRACKER + PROGRESS BARS (merged Path to Mastery + Milestones) ── */}
       <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-muted">Archetype Progression</h3>
-            <p className="text-xs text-white/30 mt-1">9 levels from gambler to system architect</p>
-          </div>
-          <div className={`text-[9px] font-black px-3 py-1.5 rounded-full border ${archetype.borderColor} ${archetype.bgColor} ${archetype.color} uppercase tracking-widest`}>
-            {archetype.scoreRange}
-          </div>
+        <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
+          <Zap size={18} className="text-spotify-green" /> Discipline Checklist
+        </h3>
+        <div className="space-y-3 mb-8">
+          {[
+            { label: '90% Rule Adherence',    done: adherenceScore >= 90,   value: `${adherenceScore}%` },
+            { label: '10x Discipline Streak',  done: currentStreak >= 10,    value: `${currentStreak}/10` },
+            { label: 'Zero Revenge Trades',    done: revengeTrades === 0,    value: revengeTrades === 0 ? '✓' : `${revengeTrades} found` },
+            { label: 'Positive Exp. Value',    done: expectedValue > 0,      value: toDisp(expectedValue) },
+            { label: 'Tier 7+ Archetype',      done: currentLevelId >= 7,    value: `Lvl ${currentLevelId}` },
+            { label: 'No Overtrade Days',      done: overtradeDays === 0,    value: overtradeDays === 0 ? '✓' : `${overtradeDays} days` },
+          ].map((m, i) => (
+            <motion.div key={m.label} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
+              className="flex items-center justify-between gap-3 p-3 rounded-xl border border-white/5 bg-black/20">
+              <div className="flex items-center gap-3">
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all ${m.done ? 'bg-spotify-green shadow-[0_0_10px_rgba(29,185,84,0.6)]' : 'bg-white/10'}`} />
+                <span className={`text-[11px] font-bold ${m.done ? 'text-white' : 'text-spotify-muted'}`}>{m.label}</span>
+              </div>
+              <span className={`text-[10px] font-black font-mono ${m.done ? 'text-spotify-green' : 'text-white/20'}`}>{m.value}</span>
+            </motion.div>
+          ))}
         </div>
 
-        <div className="relative">
-          {/* Vertical line */}
-          <div className="absolute left-5 top-5 bottom-5 w-px bg-white/5" />
-          <motion.div
-            className="absolute left-5 top-5 w-px bg-gradient-to-b from-spotify-green to-transparent"
-            initial={{ height: 0 }}
-            animate={{ height: `${(currentLevelId / 8) * 100}%` }}
-            transition={{ duration: 1.2, ease: 'easeOut' }}
-          />
-
-          <div className="space-y-2">
-            {ARCHETYPES_LIST.map(stage => {
-              const isActive = currentLevelId === stage.id;
-              const isPast   = currentLevelId > stage.id;
-              const isFuture = currentLevelId < stage.id;
-              return (
-                <motion.div
-                  key={stage.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: stage.id * 0.05 }}
-                  className={`relative flex items-center gap-4 p-3 rounded-2xl transition-all ${isActive ? 'bg-white/[0.05] border border-white/10' : ''}`}
-                >
-                  {/* Node */}
-                  <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                    isActive ? 'bg-white scale-110 shadow-[0_0_24px_rgba(255,255,255,0.2)]' :
-                    isPast   ? 'bg-spotify-green/20' : 'bg-white/5'
-                  }`}>
-                    {isPast
-                      ? <span className="text-spotify-green text-sm font-black">✓</span>
-                      : <span className={isActive ? 'text-base' : 'text-sm opacity-50'}>{stage.icon}</span>
-                    }
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-black transition-colors ${isActive ? 'text-white' : isPast ? 'text-white/30' : 'text-white/15'}`}>
-                        {stage.name}
-                      </span>
-                      {isActive && (
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border ${archetype.borderColor} ${archetype.bgColor} ${archetype.color}`}>
-                          You are here
-                        </span>
-                      )}
-                    </div>
-                    <p className={`text-[10px] font-bold ${isActive ? 'text-spotify-muted' : 'text-white/10'}`}>{stage.sub}</p>
-                  </div>
-
-                  <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 ${
-                    isActive ? stage.color : isPast ? 'text-spotify-green/30' : 'text-white/8'
-                  }`}>
-                    Lvl {stage.id}
-                  </span>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Next level callout */}
-        <div className={`mt-6 p-5 rounded-2xl border ${archetype.borderColor} ${archetype.bgColor}`}>
-          <p className="text-[9px] font-black uppercase tracking-widest text-spotify-muted mb-1">Next Level Requirement</p>
-          <p className={`text-sm font-bold ${archetype.color}`}>{archetype.nextLevel}</p>
+        <div className="space-y-4 pt-6 border-t border-white/5">
+          {[
+            { label: 'Discipline', score: adherenceScore, advice: adherenceScore < 80 ? 'Stick to "Plan: Yes" for your next 5 trades.' : 'Exceptional focus. Your rules are your edge.', color: 'bg-spotify-green' },
+            { label: 'Risk Control', score: riskScore, advice: riskScore < 70 ? 'Risk per trade is volatile. Aim for ±10% deviation.' : 'Rock solid sizing. This prevents emotional sabotage.', color: 'bg-blue-400' },
+            { label: 'Edge Efficiency', score: Math.round(winRate * 100), advice: null, color: 'bg-purple-400' },
+          ].map((item, idx) => (
+            <div key={idx} className="space-y-2">
+              <div className="flex justify-between items-end">
+                <span className="text-xs font-black uppercase tracking-widest text-spotify-muted">{item.label}</span>
+                <span className={`text-sm font-black ${item.score > 70 ? 'text-spotify-green' : item.score > 40 ? 'text-yellow-500' : 'text-red-400'}`}>{item.score}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <motion.div initial={{ width: 0 }} animate={{ width: `${item.score}%` }} transition={{ duration: 1, delay: idx * 0.1 }}
+                  className={`h-full rounded-full ${item.color}`} />
+              </div>
+              {item.advice && <p className="text-[10px] text-spotify-muted leading-relaxed italic">{item.advice}</p>}
+            </div>
+          ))}
         </div>
       </div>
+      </>
+      )}
 
-      {/* ── PATH TO MASTERY + DAILY QUEST ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
-          <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
-            <BookOpen size={18} className="text-spotify-green" /> Path to Mastery
-          </h3>
-          <div className="space-y-6">
-            {[
-              { label: 'Discipline', score: adherenceScore, advice: adherenceScore < 80 ? 'Stick to "Plan: Yes" for your next 5 trades.' : 'Exceptional focus. Your rules are your edge.' },
-              { label: 'Risk Control', score: riskScore, advice: riskScore < 70 ? 'Risk per trade is volatile. Aim for ±10% deviation.' : 'Rock solid sizing. This prevents emotional sabotage.' },
-              { label: 'Psychology', score: Math.min(100, Math.round((currentStreak / 10) * 100)), advice: currentStreak < 3 ? 'You may be in a frustration zone. Reset your mind.' : `${currentStreak}-trade rule-following streak. Keep going.` }
-            ].map((item, idx) => (
-              <div key={idx} className="space-y-2">
-                <div className="flex justify-between items-end">
-                  <span className="text-xs font-black uppercase tracking-widest text-spotify-muted">{item.label}</span>
-                  <span className={`text-sm font-black ${item.score > 70 ? 'text-spotify-green' : item.score > 40 ? 'text-yellow-500' : 'text-red-400'}`}>{item.score}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${item.score}%` }} transition={{ duration: 1, delay: idx * 0.1 }}
-                    className={`h-full rounded-full ${item.score > 70 ? 'bg-spotify-green' : item.score > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} />
-                </div>
-                <p className="text-[10px] text-spotify-muted leading-relaxed italic">{item.advice}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
-          <h3 className="text-lg font-black text-white mb-6 flex items-center gap-2">
-            <Zap size={18} className="text-spotify-green" /> Milestone Tracker
-          </h3>
-          <div className="space-y-3 mb-8">
-            {[
-              { label: '90% Rule Adherence',    done: adherenceScore >= 90,   value: `${adherenceScore}%` },
-              { label: '10x Discipline Streak',  done: currentStreak >= 10,    value: `${currentStreak}/10` },
-              { label: 'Zero Revenge Trades',    done: revengeTrades === 0,    value: revengeTrades === 0 ? '✓' : `${revengeTrades} found` },
-              { label: 'Positive Exp. Value',    done: expectedValue > 0,      value: toDisp(expectedValue) },
-              { label: 'Tier 7+ Archetype',      done: currentLevelId >= 7,    value: `Lvl ${currentLevelId}` },
-              { label: 'No Overtrade Days',      done: overtradeDays === 0,    value: overtradeDays === 0 ? '✓' : `${overtradeDays} days` },
-            ].map((m, i) => (
-              <motion.div key={m.label} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}
-                className="flex items-center justify-between gap-3 p-3 rounded-xl border border-white/5 bg-black/20">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all ${m.done ? 'bg-spotify-green shadow-[0_0_10px_rgba(29,185,84,0.6)]' : 'bg-white/10'}`} />
-                  <span className={`text-[11px] font-bold ${m.done ? 'text-white' : 'text-spotify-muted'}`}>{m.label}</span>
-                </div>
-                <span className={`text-[10px] font-black font-mono ${m.done ? 'text-spotify-green' : 'text-white/20'}`}>{m.value}</span>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Score bars */}
-          <div className="space-y-3 pt-6 border-t border-white/5">
-            {[
-              { label: 'Plan Adherence', score: adherenceScore, color: 'bg-spotify-green' },
-              { label: 'Risk Stability',  score: riskScore,      color: 'bg-blue-400'      },
-              { label: 'Edge Efficiency', score: Math.round(winRate * 100), color: 'bg-purple-400' }
-            ].map(s => (
-              <div key={s.label} className="flex items-center gap-3">
-                <span className="text-[9px] font-black uppercase tracking-widest text-spotify-muted w-28 shrink-0">{s.label}</span>
-                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${s.score}%` }} transition={{ duration: 1 }}
-                    className={`h-full rounded-full ${s.color}`} />
-                </div>
-                <span className="text-[10px] font-black text-white w-8 text-right">{s.score}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
+      {activeTab === 'growth' && (
+      <>
       {/* ── 12-MONTH PROJECTION ── */}
       <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -6754,7 +6737,7 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
                   </div>
                 );
               }} />
-              <Area type="monotone" dataKey="projected" stroke="#1DB954" strokeWidth={2.5} fillOpacity={1} fill="url(#projGrad)" />
+                <Area type="monotone" dataKey="projected" stroke="#1DB954" strokeWidth={2.5} fillOpacity={1} fill="url(#projGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -6771,6 +6754,8 @@ function HabitsPage({ trades, displayCurrency, stats }: any) {
           </div>
         </div>
       </div>
+      </>
+      )}
 
     </div>
   );
