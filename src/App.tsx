@@ -161,7 +161,6 @@ const generateTradeFingerprint = (t: any) => {
   return `${date}|${time}|${pair}|${dir}|${entry}|${exit}|${pnl}`;
 };
 
-REPLACE:
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
