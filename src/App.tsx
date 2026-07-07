@@ -2314,7 +2314,12 @@ If no anomaly: return exactly the word NULL`}]
 
               />
             )}
-             {/* Calendar is now a view toggle inside History — see HistoryPage viewMode */}
+            {activePage === 'calendar' && (
+              <CalendarPage
+                trades={stats.computedTrades ?? trades}
+                displayCurrency={displayCurrency}
+              />
+            )}
             {activePage === 'habits' && (
               <HabitsPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} stats={stats} setActivePage={setActivePage} />
             )}
