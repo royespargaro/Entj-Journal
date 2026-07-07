@@ -7507,8 +7507,8 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
     })).sort((a, b) => b.pnl - a.pnl);
 
     // Core metrics
-    const winTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl > 0);
-    const lossTrades = tradesWithUsdPnl.filter((t: any) => t.usdPnl < 0);
+    const winTrades = tradesWithUsdPnl.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'WIN');
+    const lossTrades = tradesWithUsdPnl.filter((t: any) => (t.computed?.result ?? t.result?.toUpperCase()) === 'LOSS');
     const grossProfit = winTrades.reduce((s: number, t: any) => s + t.usdPnl, 0);
     const grossLoss = Math.abs(lossTrades.reduce((s: number, t: any) => s + t.usdPnl, 0));
     const profitFactor = sanitize(grossLoss > 0 ? parseFloat((grossProfit / grossLoss).toFixed(2)) : grossProfit > 0 ? 999 : 0);
