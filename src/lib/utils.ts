@@ -621,7 +621,6 @@ export function generateFindings(habitStats: {
 }
 
 export function generateBehavioralStory(habitStats: {
-</parameter>
   emotionBreakdown: { emotion: string; pnl: number; winRate: number; count: number }[];
   sessionStats: { session: string; pnl: number; wr: number; count: number }[];
   pairStats: { pair: string; pnl: number; wr: number; count: number }[];
