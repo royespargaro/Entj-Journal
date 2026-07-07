@@ -50,12 +50,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import Groq from 'groq-sdk';
-import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_MONEY, withComputed, generateBehavioralStory } from './lib/utils';
+import { convertCurrency, formatNum, formatCurrency, cleanMoney, calcRR, avgRR as computeAvgRR, classifyTrade, getNoRiskDataStats, calcRewardCaptureRatio, DEFAULT_BE_THRESHOLD_MONEY, withComputed, generateBehavioralStory, generateFindings, suggestMission, missionProgress } from './lib/utils';
 import { BottomNav } from './components/BottomNav';
 import { EdgeProtocolModal } from './components/EdgeProtocolModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { AnalyticsChatModal } from './components/AnalyticsChatModal';
 import { PerformanceInsightModal } from './components/PerformanceInsightModal';
+import { PerformanceIntelligenceModal } from './components/PerformanceIntelligenceModal';
 import { RulesManager } from './components/RulesManager';
 import { MoreMenu } from './components/MoreMenu';
 import KillZoneTicker from './components/KillZoneTicker';
@@ -1364,10 +1365,8 @@ const { user, showToast, logout } = useAuth();
   const [dailySetups, setDailySetups] = useState<DailySetup[]>([]);
   const [dailyGoals, setDailyGoals] = useState<string>('');
   const [activePage, setActivePage] = useState('dashboard');
-  const [activeLogTab, setActiveLogTab] = useState('log-trade');
- EPLACE:
+   const [activeLogTab, setActiveLogTab] = useState('log-trade');
   const [showInsights, setShowInsights] = useState(false);
-
   useEffect(() => {
     if (!user) return;
     const today = new Date();
@@ -2315,9 +2314,8 @@ If no anomaly: return exactly the word NULL`}]
 
               />
             )}
-            {/* Calendar is now a view toggle inside History — see HistoryPage viewMode */}
-            )}            
-          {activePage === 'habits' && (
+             {/* Calendar is now a view toggle inside History — see HistoryPage viewMode */}
+            {activePage === 'habits' && (
               <HabitsPage trades={stats.computedTrades ?? trades} displayCurrency={displayCurrency} stats={stats} setActivePage={setActivePage} />
             )}
        {activePage === 'analytics' && (
@@ -6243,12 +6241,11 @@ function HabitsPage({ trades, displayCurrency, stats, setActivePage }: any) {
     { id: 8, name: 'The Architect',  icon: '🏛️', sub: 'System Architect',         color: 'text-amber-400'     },
   ];
 
-  const currentLevelId = parseInt(archetype.level.match(/Lvl (\d+)/)?.[1] || '0');
+    const currentLevelId = parseInt(archetype.level.match(/Lvl (\d+)/)?.[1] || '0');
 
   const [activeTab, setActiveTab] = useState<'overview' | 'behavior' | 'discipline' | 'growth'>('overview');
   const [isLadderExpanded, setIsLadderExpanded] = useState(false);
-
-  const behavioralStory = useMemo(() => generateBehavioralStory({
+  const [isIntelligenceOpen, setIsIntelligenceOpen] = useState(false);  const behavioralStory = useMemo(() => generateBehavioralStory({
     emotionBreakdown, sessionStats, pairStats, consecutiveLosses, revengeTrades, overtradeDays, weekDelta, thisWeek
   }), [emotionBreakdown, sessionStats, pairStats, consecutiveLosses, revengeTrades, overtradeDays, weekDelta, thisWeek]);
 
@@ -6328,11 +6325,16 @@ function HabitsPage({ trades, displayCurrency, stats, setActivePage }: any) {
 
     {activeTab === 'overview' && (
       <>
-      {/* ── AI-STYLE BEHAVIORAL STORY ── */}
+       {/* ── AI-STYLE BEHAVIORAL STORY ── */}
       <div className="bg-gradient-to-br from-white/[0.03] to-transparent border border-white/10 rounded-3xl p-8">
-        <div className="flex items-center gap-2 mb-5">
-          <Sparkles size={16} className="text-spotify-green" />
-          <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-green">Your Behavioral Story</h3>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-spotify-green" />
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-spotify-green">Your Behavioral Story</h3>
+          </div>
+          <button onClick={() => setIsIntelligenceOpen(true)} className="text-[9px] font-black uppercase tracking-widest text-spotify-green hover:text-white transition-colors flex items-center gap-1">
+            Full Intelligence →
+          </button>
         </div>
         <div className="space-y-3">
           {behavioralStory.map((line, i) => (
@@ -6343,6 +6345,15 @@ function HabitsPage({ trades, displayCurrency, stats, setActivePage }: any) {
           ))}
         </div>
       </div>
+
+      {isIntelligenceOpen && (
+        <PerformanceIntelligenceModal
+          onClose={() => setIsIntelligenceOpen(false)}
+          context={{ emotionBreakdown, sessionStats, pairStats, setupStats, consecutiveLosses, revengeTrades, overtradeDays, maxDD, expectedValue, adherenceScore }}
+          userId={user?.uid}
+          toDisp={toDisp}
+        />
+      )}
 
       {/* ── TILT STATUS ── */}
       {isTilting ? (        <motion.div
@@ -6874,7 +6885,7 @@ if (endDate) {
 
   return (
     <div className="space-y-8">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter mb-1">Trade <span className="italic text-spotify-green">History</span></h1>
           <p className="text-xs font-medium text-spotify-muted tracking-tight">Click any row for full technical breakdown.</p>
@@ -6883,12 +6894,10 @@ if (endDate) {
           <button onClick={() => setViewMode('list')} className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'list' ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}>List</button>
           <button onClick={() => setViewMode('calendar')} className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${viewMode === 'calendar' ? 'bg-white text-black' : 'text-white/40 hover:text-white'}`}>Calendar</button>
         </div>
+      </div>
 
-REPLACE_CONTINUES_BELOW
-        
-        {viewMode === 'list' && (
-        <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-center">
-          <div className="w-full sm:w-auto relative group">
+      {viewMode === 'list' && (
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-center">          <div className="w-full sm:w-auto relative group">
             <input 
               type="text"
               placeholder="Search pairs, setups, tags..."
@@ -6964,7 +6973,7 @@ REPLACE_CONTINUES_BELOW
             )}
           </div>
 
-         <div className="w-full sm:w-auto flex gap-1 bg-white/5 p-1 rounded-full border border-white/5 overflow-x-auto no-scrollbar">
+       <div className="w-full sm:w-auto flex gap-1 bg-white/5 p-1 rounded-full border border-white/5 overflow-x-auto no-scrollbar">
             {['all', 'win', 'loss', 'be', 'short', 'long'].map(f => (
               <button
                 key={f}
@@ -6978,16 +6987,13 @@ REPLACE_CONTINUES_BELOW
             ))}
           </div>
         </div>
-      </div>
-
       )}
-      </div>
 
       {viewMode === 'calendar' ? (
         <CalendarPage trades={trades} displayCurrency={displayCurrency} />
       ) : (
-      <div className="bg-spotify-card rounded-lg overflow-hidden shadow-2xl">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+      <>
+      <div className="bg-spotify-card rounded-lg overflow-hidden shadow-2xl">        <div className="p-5 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-xs font-extrabold uppercase tracking-widest text-spotify-muted">{filteredTrades.length} Trade{filteredTrades.length !== 1 ? 's' : ''}</h2>
         </div>
         <div className="overflow-x-auto">
@@ -7112,10 +7118,10 @@ REPLACE_CONTINUES_BELOW
           Load More Trades
         </button>
       )}
-      </div>
+      </>
       )}
 
-      <BulkEditModal 
+      <BulkEditModal
         isOpen={isBulkEditOpen} 
         onClose={() => setIsBulkEditOpen(false)} 
         onSave={(updates: any) => {
@@ -7411,12 +7417,11 @@ function CalendarPage({ trades, displayCurrency }: any) {
   );
 }
 function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeThresholds }: any) {
-  const [isEditingThresholds, setIsEditingThresholds] = useState(false);
-  const [thresholdDraft, setThresholdDraft] = useState({ money: beThresholds?.money ?? 1 });
-  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
-  const [isInsightModalOpen, setIsInsightModalOpen] = useState(false);
   const [whatIfFilter, setWhatIfFilter] = useState<{ type: string; value: string } | null>(null);
-
+   const [isIntelligenceOpen, setIsIntelligenceOpen] = useState(false);
+  const [isEditingThresholds, setIsEditingThresholds] = useState(false);
+  const [thresholdDraft, setThresholdDraft] = useState({ money: 1 });
+  const { user } = useAuth();
   const analyticsChartData = useMemo(() => {
     if (!trades || !trades.length) return null;
 
@@ -7692,6 +7697,19 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
     };
   }, [analyticsChartData, whatIfFilter]);
 
+ const intelligenceContext = analyticsChartData ? {
+    emotionBreakdown: analyticsChartData.emotionData.map((e: any) => ({ emotion: e.name, pnl: e.pnl, winRate: e.wr, count: e.count, wins: Math.round(e.count * e.wr / 100), losses: e.count - Math.round(e.count * e.wr / 100) })),
+    sessionStats: analyticsChartData.sessionData.map((s: any) => ({ session: s.name, pnl: s.pnl, wr: s.wr, count: s.count })),
+    pairStats: [],
+    setupStats: analyticsChartData.setupPerformanceData.map((s: any) => ({ setup: s.name, pnl: s.pnl, wr: s.wr, count: s.count })),
+    consecutiveLosses: analyticsChartData.maxConsecLosses,
+    revengeTrades: 0,
+    overtradeDays: 0,
+    maxDD: 0,
+    expectedValue: analyticsChartData.expectancy,
+    adherenceScore: 0,
+  } : null;
+
   if (!analyticsChartData) return (
     <div className="flex flex-col items-center justify-center py-32 gap-4">
       <BarChart3 size={48} className="text-white/10" />
@@ -7712,17 +7730,20 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
           <p className="text-xs font-medium text-spotify-muted">Decision support — not just statistics.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setIsChatModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all">
-            <MessageCircle size={14} /> Discuss
-          </button>
-          <button onClick={() => setIsInsightModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-spotify-green text-black rounded-full text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all">
-            <Sparkles size={14} /> AI Mentor
+         <button onClick={() => setIsIntelligenceOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-spotify-green text-black rounded-full text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all">
+            <Sparkles size={14} /> Performance Intelligence
           </button>
         </div>
       </div>
 
-      {isChatModalOpen && <AnalyticsChatModal onClose={() => setIsChatModalOpen(false)} context={analyticsChartData} />}
-      {isInsightModalOpen && <PerformanceInsightModal onClose={() => setIsInsightModalOpen(false)} context={analyticsChartData} />}
+      {isIntelligenceOpen && intelligenceContext && (
+        <PerformanceIntelligenceModal
+          onClose={() => setIsIntelligenceOpen(false)}
+          context={intelligenceContext}
+          userId={user?.uid}
+          toDisp={toDisp}
+        />
+      )}
 
       {/* ── LAYER 1: AM I MAKING MONEY? ── */}
       <div className="relative overflow-hidden bg-white/[0.03] border border-white/10 rounded-3xl p-8 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
@@ -8363,12 +8384,11 @@ function AnalyticsPage({ trades, displayCurrency, stats, beThresholds, onSaveBeT
           </div>
         </div>
 
-        {/* AI Mentor CTA */}
+       {/* AI Mentor CTA */}
         <div
-          onClick={() => setIsInsightModalOpen(true)}
+          onClick={() => setIsIntelligenceOpen(true)}
           className="relative overflow-hidden bg-gradient-to-br from-spotify-green/10 via-spotify-green/5 to-transparent border border-spotify-green/20 rounded-3xl p-6 cursor-pointer hover:border-spotify-green/40 transition-all group"
-        >
-          <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-spotify-green/10 rounded-full blur-[60px] pointer-events-none group-hover:bg-spotify-green/20 transition-all" />
+        >          <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-spotify-green/10 rounded-full blur-[60px] pointer-events-none group-hover:bg-spotify-green/20 transition-all" />
           <div className="relative z-10 flex items-center justify-between gap-6">
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest text-spotify-green mb-1">AI Mentor</p>

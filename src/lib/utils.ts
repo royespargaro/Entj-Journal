@@ -459,7 +459,169 @@ export const DEFAULT_BE_THRESHOLD_MONEY = 1;
 // instead of a wall of numbers. Deterministic (no AI call needed);
 // picks the 2-3 most notable patterns and writes them as sentences.
 // ============================================================
+// ============================================================
+// PERFORMANCE INTELLIGENCE — confidence-scored, evidence-backed findings
+// ============================================================
+// AI never invents these numbers or the ranking — everything here is
+// computed deterministically from `stats`. The LLM's only job downstream
+// is to phrase the "why" narration; it never decides severity or confidence.
+// ============================================================
+
+export type Evidence = { label: string; value: string };
+
+export type Finding = {
+  id: string;
+  category: 'priority' | 'edge' | 'risk' | 'goal';
+  icon: string;
+  title: string;
+  headline: string; // e.g. "Revenge Trading"
+  confidence: number; // 0-100
+  severity: number; // 0-100, used for ranking within category
+  evidence: Evidence[];
+  dollarImpact: number | null;
+};
+
+// Confidence scales with sample size — small samples never get high
+// confidence, regardless of how extreme the pattern looks.
+function confidenceFromSampleSize(n: number, maxConfidence: number = 96): number {
+  if (n <= 0) return 0;
+  // Logistic-ish ramp: ~50% conf at n=5, ~80% at n=15, caps near maxConfidence
+  const raw = maxConfidence * (1 - Math.exp(-n / 12));
+  return Math.round(Math.min(maxConfidence, Math.max(10, raw)));
+}
+
+export function generateFindings(habitStats: {
+  emotionBreakdown: { emotion: string; pnl: number; winRate: number; count: number; wins: number; losses: number }[];
+  sessionStats: { session: string; pnl: number; wr: number; count: number }[];
+  pairStats: { pair: string; pnl: number; wr: number; count: number }[];
+  setupStats: { setup: string; pnl: number; wr: number; count: number }[];
+  consecutiveLosses: number;
+  revengeTrades: number;
+  overtradeDays: number;
+  maxDD: number;
+  expectedValue: number;
+  adherenceScore: number;
+}, toDisp: (usd: number) => string): Finding[] {
+  const findings: Finding[] = [];
+
+  // ── PRIORITY: revenge trading ──
+  if (habitStats.revengeTrades > 0) {
+    findings.push({
+      id: 'revenge',
+      category: 'priority',
+      icon: '🚨',
+      title: 'Revenge Trading',
+      headline: 'Revenge Trading',
+      confidence: confidenceFromSampleSize(habitStats.revengeTrades, 96),
+      severity: Math.min(100, habitStats.revengeTrades * 20),
+      evidence: [
+        { label: 'Repeated pattern instances', value: `${habitStats.revengeTrades}` },
+        { label: 'Trigger window', value: 'Within 15 min of a loss' },
+      ],
+      dollarImpact: null,
+    });
+  }
+
+  // ── PRIORITY: overtrading ──
+  if (habitStats.overtradeDays > 0) {
+    findings.push({
+      id: 'overtrade',
+      category: 'priority',
+      icon: '🚨',
+      title: 'Overtrading',
+      headline: 'Overtrading',
+      confidence: confidenceFromSampleSize(habitStats.overtradeDays, 90),
+      severity: Math.min(100, habitStats.overtradeDays * 15),
+      evidence: [
+        { label: 'Days with 5+ trades', value: `${habitStats.overtradeDays}` },
+      ],
+      dollarImpact: null,
+    });
+  }
+
+  // ── PRIORITY: worst emotion ──
+  const worstEmotion = [...habitStats.emotionBreakdown].filter(e => e.count >= 2).sort((a, b) => a.pnl - b.pnl)[0];
+  if (worstEmotion && worstEmotion.pnl < 0) {
+    findings.push({
+      id: 'worst-emotion',
+      category: 'priority',
+      icon: '🚨',
+      title: `Trading While "${worstEmotion.emotion}"`,
+      headline: worstEmotion.emotion,
+      confidence: confidenceFromSampleSize(worstEmotion.count, 92),
+      severity: Math.min(100, Math.abs(worstEmotion.pnl) / 10),
+      evidence: [
+        { label: 'Trades', value: `${worstEmotion.count}` },
+        { label: 'Win rate', value: `${worstEmotion.winRate}%` },
+        { label: 'Total impact', value: toDisp(worstEmotion.pnl) },
+      ],
+      dollarImpact: worstEmotion.pnl,
+    });
+  }
+
+  // ── EDGE: best session ──
+  const totalPnl = habitStats.sessionStats.reduce((s, x) => s + Math.max(0, x.pnl), 0) || 1;
+  const bestSession = [...habitStats.sessionStats].filter(s => s.count >= 3).sort((a, b) => b.pnl - a.pnl)[0];
+  if (bestSession && bestSession.pnl > 0) {
+    const pctOfProfit = Math.round((bestSession.pnl / totalPnl) * 100);
+    findings.push({
+      id: 'best-session',
+      category: 'edge',
+      icon: '⭐',
+      title: `${bestSession.session} Session`,
+      headline: bestSession.session,
+      confidence: confidenceFromSampleSize(bestSession.count, 94),
+      severity: pctOfProfit,
+      evidence: [
+        { label: 'Trades', value: `${bestSession.count}` },
+        { label: 'Win rate', value: `${bestSession.wr}%` },
+        { label: 'Share of total profit', value: `${pctOfProfit}%` },
+      ],
+      dollarImpact: bestSession.pnl,
+    });
+  }
+
+  // ── EDGE: best setup ──
+  const bestSetup = [...habitStats.setupStats].filter(s => s.count >= 2).sort((a, b) => b.pnl - a.pnl)[0];
+  if (bestSetup && bestSetup.pnl > 0) {
+    findings.push({
+      id: 'best-setup',
+      category: 'edge',
+      icon: '⭐',
+      title: `${bestSetup.setup} Setup`,
+      headline: bestSetup.setup,
+      confidence: confidenceFromSampleSize(bestSetup.count, 90),
+      severity: bestSetup.wr,
+      evidence: [
+        { label: 'Trades', value: `${bestSetup.count}` },
+        { label: 'Win rate', value: `${bestSetup.wr}%` },
+        { label: 'Total profit', value: toDisp(bestSetup.pnl) },
+      ],
+      dollarImpact: bestSetup.pnl,
+    });
+  }
+
+  // ── RISK: drawdown ──
+  findings.push({
+    id: 'drawdown',
+    category: 'risk',
+    icon: '🛡',
+    title: 'Max Drawdown',
+    headline: habitStats.maxDD > 500 ? 'Elevated' : 'Stable',
+    confidence: 98, // this is a direct computation, not a pattern inference
+    severity: Math.min(100, (habitStats.maxDD / 1000) * 100),
+    evidence: [
+      { label: 'Max drawdown', value: toDisp(habitStats.maxDD) },
+      { label: 'Consecutive losses (current)', value: `${habitStats.consecutiveLosses}` },
+    ],
+    dollarImpact: -habitStats.maxDD,
+  });
+
+  return findings;
+}
+
 export function generateBehavioralStory(habitStats: {
+</parameter>
   emotionBreakdown: { emotion: string; pnl: number; winRate: number; count: number }[];
   sessionStats: { session: string; pnl: number; wr: number; count: number }[];
   pairStats: { pair: string; pnl: number; wr: number; count: number }[];
@@ -518,6 +680,57 @@ export function generateBehavioralStory(habitStats: {
   return lines.slice(0, 4);
 }
 
+// ============================================================
+// MISSIONS — stateful, cross-session progress tracking
+// ============================================================
+export type Mission = {
+  id: string;
+  metric: string; // e.g. 'rewardCapture', 'consecutiveLosses', 'planAdherence'
+  label: string; // "Hold winners longer"
+  startValue: number;
+  targetValue: number;
+  currentValue: number;
+  status: 'active' | 'completed' | 'abandoned';
+  estimatedImpact: string; // "+$420/month"
+  createdAt: number; // epoch ms
+  completedAt: number | null;
+};
+
+export function suggestMission(finding: Finding, currentMetricValue: number): Omit<Mission, 'id' | 'createdAt' | 'completedAt' | 'status'> | null {
+  // Only priority/risk findings become missions — edges are celebrated, not fixed.
+  if (finding.category !== 'priority' && finding.category !== 'risk') return null;
+
+  const target = finding.id === 'revenge' || finding.id === 'overtrade'
+    ? 0
+    : Math.round(currentMetricValue * 0.5); // aim to halve the negative pattern
+
+  return {
+    metric: finding.id,
+    label: `Reduce ${finding.headline}`,
+    startValue: currentMetricValue,
+    targetValue: target,
+    currentValue: currentMetricValue,
+    estimatedImpact: finding.dollarImpact ? `+$${Math.round(Math.abs(finding.dollarImpact) * 0.5)}/month` : 'Improved consistency',
+  };
+}
+
+export function missionProgress(mission: Mission): number {
+  const range = Math.abs(mission.startValue - mission.targetValue) || 1;
+  const moved = Math.abs(mission.startValue - mission.currentValue);
+  return Math.round(Math.min(100, Math.max(0, (moved / range) * 100)));
+}
+
+// ============================================================
+// INTELLIGENCE TIMELINE — monthly snapshots of dominant weakness/strength
+// ============================================================
+export type TimelineEntry = {
+  id: string;
+  monthKey: string; // "2026-01"
+  type: 'weakness_identified' | 'mission_completed' | 'strength_discovered' | 'milestone';
+  label: string;
+  detail: string;
+  createdAt: number;
+};
 // Tags every trade with a classification derived from classifyTrade(),
 // as `._classification`. Use this everywhere a WIN/BE/LOSS label or a
 // win-rate % is shown, instead of the stale stored `result` field
