@@ -1685,16 +1685,7 @@ TRADE DETAILS:
     const lossCount = classifications.filter(c => c.result === 'LOSS').length;
     const wins = winCount;
     const losses = lossCount;
-This makes wins/losses (and therefore winRateVal, the Dashboard win rate, and the archetype engine) use the same correctly-derived classification as everything else, instead of a field that's null on every trade logged after your BE-threshold refactor.
-One more spot with the same disease — further down in the same stats block:
-Find:
-     const winTrades = computedTrades.filter((t: any) => t.computed.result === 'WIN');
-    const lossTrades = computedTrades.filter((t: any) => t.computed.result === 'LOSS');
-Replace with:
-    const winTrades = computedTrades.filter((t: any) => t.computed.result === 'WIN');
-    const lossTrades = computedTrades.filter((t: any) => t.computed.result === 'LOSS');
-This one was doubly broken — it checked lowercase 'win'/'loss' against a field that's stored uppercase ('WIN'/'LOSS') or null, so avgWin/avgLoss/expectancy were likely also silently wrong (probably 0 or NaN whenever this ran on the un-derived field).
-    const structuredTradeCount = trades.length - noRiskData.count;
+      const structuredTradeCount = trades.length - noRiskData.count;
     const analyticsCoveragePct = trades.length > 0
       ? Math.round((structuredTradeCount / trades.length) * 100)
       : 0;
